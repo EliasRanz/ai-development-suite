@@ -18,6 +18,19 @@ server_manager_instance: Optional[ServerManager] = None # To hold the server_man
 if TYPE_CHECKING:
     from .server_manager import ServerManager as ServerManagerType
     from .gui_manager import GUIManager as GUIManagerType
+    # Corrected LoggerType to avoid conflict with the 'logger' variable
+    from logging import Logger as ActualLoggerType
+    from pathlib import Path as PathType
+
+# Define LoggerType for type hinting after potential import conflicts are resolved
+if TYPE_CHECKING:
+    LoggerType = ActualLoggerType
+else:
+    LoggerType = logging.Logger
+
+
+def custom_excepthook(exc_type, exc_value, exc_traceback):
+    """Custom exception hook to log unhandled exceptions."""
     from logging import Logger as LoggerType
     from pathlib import Path as PathType
 
@@ -92,6 +105,9 @@ def main():
     rotate_and_cleanup_logs(settings.LOG_DIR, settings.MAX_LOG_FILES, settings.MAX_LOG_AGE_DAYS)
     # Assign to global logger
     logger = setup_launcher_logger(settings.LOG_DIR, settings.DEBUG)
+
+    # Set the global exception hook AFTER the main logger is configured
+    sys.excepthook = custom_excepthook
 
     logger.info(f"Starting {settings.APP_NAME} (Version 1.0)")
     if settings.DEBUG:
@@ -184,9 +200,13 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        # Use the globally set 'logger' if available, otherwise the pre-main one
-        effective_logger = logger if logger and logger.handlers else main_logger
-        effective_logger.error(f"A fatal, unhandled error occurred in __main__: {e}", exc_info=True)
+        # If an exception reaches here, sys.excepthook should have already handled it
+        # if 'logger' was set. If 'logger' wasn't set, this is a very early error.
+        # The custom_excepthook will attempt to log it.
+        # We can add a print to original stderr as a last resort if the packager allows.
+        print(f"FATAL PRE-MAIN ERROR (should have been caught by excepthook): {e}", file=sys.__stderr__)
+        import traceback
+        traceback.print_exception(e, file=sys.__stderr__)
     finally:
         # Ensure logging.shutdown() is called to flush handlers
         # Use the globally set 'logger' if available for a final message
