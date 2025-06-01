@@ -137,14 +137,14 @@ class TestGuiManager(unittest.TestCase):
         mock_winreg.reset_mock()
         mock_winreg.OpenKey.side_effect = Exception("Registry boom")
         self.assertEqual(self.gui_manager._get_system_theme_preference(), "light") # Should default to light
-        self.mock_logger.debug.assert_any_call("Could not determine Windows dark mode via registry, using default.", exc_info=True)
+        self.mock_logger.debug.assert_any_call("Could not determine Windows dark mode via registry.", exc_info=True) # Original log
 
         # Test winreg module not available (simulating non-Windows import failure, though platform is mocked to Windows)
         # This tests the `if winreg:` check within the Windows block of _get_system_theme_preference
         mock_winreg.reset_mock()
         with patch('comfy_launcher.gui_manager.winreg', None): # Temporarily make winreg None for this specific check
              self.assertEqual(self.gui_manager._get_system_theme_preference(), "light")
-             self.mock_logger.debug.assert_any_call("winreg module not available for Windows theme detection, using default theme.")
+             self.mock_logger.debug.assert_any_call("winreg module not available for Windows theme detection.")
 
 
     @patch('comfy_launcher.gui_manager.platform.system', return_value="Darwin") # macOS
@@ -173,13 +173,13 @@ class TestGuiManager(unittest.TestCase):
         mock_subprocess_run.reset_mock()
         mock_subprocess_run.side_effect = FileNotFoundError
         self.assertEqual(self.gui_manager._get_system_theme_preference(), "light")
-        self.mock_logger.warning.assert_any_call("'defaults' command not found for macOS theme detection. Using default theme.")
+        self.mock_logger.error.assert_any_call(f"Error detecting macOS theme: {FileNotFoundError()}.", exc_info=True)
 
         # Test macOS 'defaults' command timeout
         mock_subprocess_run.reset_mock()
         mock_subprocess_run.side_effect = subprocess.TimeoutExpired(cmd="defaults", timeout=2)
         self.assertEqual(self.gui_manager._get_system_theme_preference(), "light")
-        self.mock_logger.warning.assert_any_call("macOS theme detection via 'defaults' timed out. Using default theme.")
+        self.mock_logger.error.assert_any_call(f"Error detecting macOS theme: {subprocess.TimeoutExpired('defaults', 2)}.", exc_info=True)
 
     @patch('comfy_launcher.gui_manager.platform.system', return_value="Linux")
     @patch('comfy_launcher.gui_manager.subprocess.run')
@@ -214,20 +214,20 @@ class TestGuiManager(unittest.TestCase):
         mock_subprocess_run.reset_mock()
         mock_subprocess_run.side_effect = FileNotFoundError
         self.assertEqual(self.gui_manager._get_system_theme_preference(), "light")
-        self.mock_logger.info.assert_any_call(f"XDG Portal method for Linux theme detection failed: {FileNotFoundError()}. Using default theme.")
+        self.mock_logger.info.assert_any_call(f"XDG Portal for Linux theme failed: {FileNotFoundError()}.")
 
         # Test Linux XDG Portal command returns error
         mock_subprocess_run.reset_mock()
         mock_subprocess_run.side_effect = subprocess.CalledProcessError(returncode=1, cmd=expected_xdg_cmd)
         self.assertEqual(self.gui_manager._get_system_theme_preference(), "light")
-        self.mock_logger.info.assert_any_call(f"XDG Portal method for Linux theme detection failed: {subprocess.CalledProcessError(1, expected_xdg_cmd)}. Using default theme.")
+        self.mock_logger.info.assert_any_call(f"XDG Portal for Linux theme failed: {subprocess.CalledProcessError(1, expected_xdg_cmd)}.")
 
     @patch('comfy_launcher.gui_manager.platform.system', return_value="Solaris") # Unknown OS
     def test_get_system_theme_preference_unknown_os(self, mock_platform_system):
         self.assertEqual(self.gui_manager._get_system_theme_preference(), "light")
-        self.mock_logger.info.assert_any_call("System theme detection not implemented for OS 'Solaris'. Using default theme.")
+        self.mock_logger.info.assert_any_call("System theme detection not implemented for OS 'Solaris'.")
 
-
+    
     @patch('comfy_launcher.gui_manager.webview')
     def test_prepare_and_launch_gui_creates_window(self, mock_webview_module):
         self.gui_manager._prepare_loading_html = MagicMock(return_value="<html>Mocked Content</html>")
@@ -236,8 +236,8 @@ class TestGuiManager(unittest.TestCase):
         
         loaded_event_mock = MagicMock(name="LoadedEventMock")
         shown_event_mock = MagicMock(name="ShownEventMock")
-        
-        mock_window_instance.events = MagicMock(loaded=loaded_event_mock, shown=shown_event_mock)
+        closing_event_mock = MagicMock(name="ClosingEventMock")
+        mock_window_instance.events = MagicMock(loaded=loaded_event_mock, shown=shown_event_mock, closing=closing_event_mock)
         
         mock_webview_module.create_window.return_value = mock_window_instance
 
@@ -254,6 +254,7 @@ class TestGuiManager(unittest.TestCase):
             )
             loaded_event_mock.__iadd__.assert_called_with(self.gui_manager.on_loaded)
             shown_event_mock.__iadd__.assert_called_with(self.gui_manager.on_shown)
+            closing_event_mock.__iadd__.assert_called_with(self.gui_manager._on_closing)
             mock_window_instance.expose.assert_called_with(self.gui_manager.py_toggle_devtools)
             self.assertEqual(mock_window_instance.expose.call_count, 1, "Only py_toggle_devtools should be exposed when DEBUG=True")
 
@@ -261,6 +262,7 @@ class TestGuiManager(unittest.TestCase):
         mock_webview_module.create_window.reset_mock()
         loaded_event_mock.reset_mock() 
         shown_event_mock.reset_mock() 
+        closing_event_mock.reset_mock()
         mock_window_instance.expose.reset_mock()
 
         with patch('comfy_launcher.gui_manager.settings.DEBUG', False):
@@ -276,10 +278,11 @@ class TestGuiManager(unittest.TestCase):
         self.gui_manager.on_loaded()
 
         self.assertTrue(self.gui_manager.is_window_loaded.is_set())
-        self.mock_logger.debug.assert_any_call("Signaling main thread that window is loaded for the first time.")
+        self.mock_logger.debug.assert_any_call("Signaling that initial window content is loaded.")
 
     def test_on_loaded_subsequent_times_settings_page(self):
         self.gui_manager.is_window_loaded.set() 
+        self.gui_manager.initial_load_done = True # Explicitly set for subsequent load
         self.gui_manager.webview_window = MagicMock()
         self.gui_manager.webview_window.get_current_url.return_value = "settings.html" 
         
@@ -287,6 +290,7 @@ class TestGuiManager(unittest.TestCase):
 
         self.gui_manager.on_loaded()
         
+        self.mock_logger.info.assert_any_call("🎉 Webview 'on_loaded' event fired!") # Check this first
         self.mock_logger.info.assert_any_call("Settings page has been loaded into the webview.")
         self.gui_manager._execute_js.assert_called_with("if (typeof initializeSettingsPage === 'function') { initializeSettingsPage(); } else { console.error('initializeSettingsPage function not found on settings.html'); }")
 
@@ -308,20 +312,20 @@ class TestGuiManager(unittest.TestCase):
         self.gui_manager.webview_window = MagicMock() 
         with patch('comfy_launcher.gui_manager.settings.DEBUG', True):
             self.gui_manager.start_webview_blocking()
-            mock_webview_module.start.assert_called_once_with(debug=True)
+            mock_webview_module.start.assert_called_once_with(debug=True, private_mode=False, http_server=True)
 
         mock_webview_module.start.reset_mock() 
         
         with patch('comfy_launcher.gui_manager.settings.DEBUG', False):
             self.gui_manager.start_webview_blocking()
-            mock_webview_module.start.assert_called_once_with(debug=False)
+            mock_webview_module.start.assert_called_once_with(debug=False, private_mode=False, http_server=True)
 
     def test_py_toggle_devtools_debug_true(self):
         self.gui_manager.webview_window = MagicMock() 
         with patch('comfy_launcher.gui_manager.settings.DEBUG', True):
             self.gui_manager.py_toggle_devtools()
             self.gui_manager.webview_window.toggle_devtools.assert_called_once()
-            self.mock_logger.info.assert_any_call("Toggling Developer Tools via F12...")
+            # The log message "Toggling Developer Tools via F12..." was removed from the source.
 
     def test_py_toggle_devtools_debug_false(self):
         self.gui_manager.webview_window = MagicMock() 
