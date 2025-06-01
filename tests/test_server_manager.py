@@ -52,7 +52,8 @@ class TestServerManager(unittest.TestCase):
         self.server_manager = ServerManager(
             comfyui_path=self.mock_comfyui_path,
             python_executable=self.mock_python_executable,
-            host="127.0.0.1",
+            listen_host="127.0.0.1",    # Changed from host
+            connect_host="127.0.0.1", # Added connect_host
             port=8188,
             logger=self.mock_logger
         )
@@ -81,7 +82,7 @@ class TestServerManager(unittest.TestCase):
 
         expected_command = [
             str(self.mock_python_executable),
-            str(self.mock_main_py), 
+            "main.py", # Use relative path as in SUT
             f"--listen={self.test_host}",
             f"--port={self.test_port}",
         ]
@@ -91,7 +92,7 @@ class TestServerManager(unittest.TestCase):
 
         mock_popen_constructor.assert_called_once_with(
             expected_command,
-            cwd=self.mock_comfyui_path,
+            cwd=str(self.mock_comfyui_path), # Expect string for cwd
             stdout=mock_file_open.return_value,
             stderr=subprocess.STDOUT,
             creationflags=expected_creationflags
@@ -150,7 +151,7 @@ class TestServerManager(unittest.TestCase):
         self.assertIsNone(process) # start_server should return None
         # Check for the specific log message from the SUT's except FileNotFoundError block
         self.mock_logger.error.assert_any_call(
-            "Could not find 'main.py' or Python executable. Please check paths.",
+            f"Could not find Python executable '{self.mock_python_executable}' or script 'main.py'. Please check paths.",
             exc_info=True
         )
 

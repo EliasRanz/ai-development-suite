@@ -54,6 +54,7 @@ class TestMainExecution(unittest.TestCase):
         mock_settings.ASSETS_DIR = Path("/fake/assets")
         mock_settings.WINDOW_WIDTH = 800
         mock_settings.WINDOW_HEIGHT = 600
+        mock_settings.EFFECTIVE_CONNECT_HOST = mock_settings.HOST
 
         # --- Simulate main execution ---
         # Patch threading.Thread to capture its arguments and control its behavior
@@ -74,7 +75,8 @@ class TestMainExecution(unittest.TestCase):
             MockServerManager.assert_called_once_with(
                 comfyui_path=mock_settings.COMFYUI_PATH,
                 python_executable=mock_settings.PYTHON_EXECUTABLE,
-                host=mock_settings.HOST,
+                listen_host=mock_settings.HOST,
+                connect_host=mock_settings.EFFECTIVE_CONNECT_HOST,
                 port=mock_settings.PORT,
                 logger=mock_logger_instance
             )
@@ -82,7 +84,7 @@ class TestMainExecution(unittest.TestCase):
                 app_name=mock_settings.APP_NAME,
                 window_width=mock_settings.WINDOW_WIDTH,
                 window_height=mock_settings.WINDOW_HEIGHT,
-                host=mock_settings.HOST,
+                connect_host=mock_settings.EFFECTIVE_CONNECT_HOST,
                 port=mock_settings.PORT,
                 assets_dir=mock_settings.ASSETS_DIR,
                 logger=mock_logger_instance,

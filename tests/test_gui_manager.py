@@ -31,7 +31,7 @@ class TestGuiManager(unittest.TestCase):
             app_name=self.current_settings.APP_NAME,
             window_width=self.current_settings.WINDOW_WIDTH,
             window_height=self.current_settings.WINDOW_HEIGHT,
-            host=self.current_settings.HOST,
+            connect_host=self.current_settings.EFFECTIVE_CONNECT_HOST, # Changed from host
             port=self.current_settings.PORT,
             assets_dir=self.current_settings.ASSETS_DIR, 
             logger=self.mock_logger,

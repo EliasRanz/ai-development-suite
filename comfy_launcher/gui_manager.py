@@ -17,11 +17,11 @@ from .config import settings
 
 class GUIManager:
     def __init__(self, app_name: str, window_width: int, window_height: int,
-                 host: str, port: int, assets_dir: Path, logger, server_manager):
+                 connect_host: str, port: int, assets_dir: Path, logger, server_manager):
         self.app_name = app_name
         self.window_width = window_width
         self.window_height = window_height
-        self.host = host
+        self.connect_host = connect_host # Host to use for webview.load_url
         self.port = port
         self.assets_dir = assets_dir
         self.logger = logger
@@ -235,8 +235,8 @@ class GUIManager:
                 self.set_status("Server found! Preparing interface...")
                 self.logger.info("🌐 ComfyUI is available, switching GUI...")
                 self._execute_js("if(typeof window.fadeOutLoading === 'function') window.fadeOutLoading();")
-                time.sleep(1.5)
-                self.webview_window.load_url(f"http://{self.host}:{self.port}")
+                time.sleep(1.5) # Give fade out animation time
+                self.webview_window.load_url(f"http://{self.connect_host}:{self.port}")
                 self.logger.info("🪄 Switched to ComfyUI interface.")
             else:
                 self.set_status("Error: Server did not respond.")

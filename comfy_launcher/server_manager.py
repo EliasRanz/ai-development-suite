@@ -13,10 +13,11 @@ if TYPE_CHECKING:
 
 class ServerManager:
     def __init__(self, comfyui_path: Path, python_executable: Path,
-                 host: str, port: int, logger: 'Logger'):
+                 listen_host: str, connect_host: str, port: int, logger: 'Logger'):
         self.comfyui_path = comfyui_path
         self.python_executable = python_executable
-        self.host = host
+        self.listen_host = listen_host    # For ComfyUI's --listen argument
+        self.connect_host = connect_host  # For launcher's connection attempts
         self.port = port
         self.logger = logger
         self.server_process: Optional[subprocess.Popen] = None # Store the managed process
@@ -54,61 +55,75 @@ class ServerManager:
             self.logger.error(f"Python executable ({self.python_executable}) does not exist or is not a file.")
             return None
 
-        main_py_path = self.comfyui_path / "main.py"
-        if not main_py_path.exists():
-            self.logger.error(f"ComfyUI main.py not found at {main_py_path}")
+        # Use a relative path for main.py, as cwd will be set to comfyui_path
+        script_to_run_arg = "main.py" 
+        
+        # Check if main.py exists in the comfyui_path
+        # This check uses the absolute path for verification before trying to run it relatively.
+        main_py_abs_path = self.comfyui_path / script_to_run_arg
+        if not main_py_abs_path.exists():
+            self.logger.error(f"ComfyUI main.py not found at {main_py_abs_path}")
             return None
 
         command = [
             str(self.python_executable),
-            str(main_py_path), # Use the full path to main.py
-            f"--listen={self.host}",
-            f"--port={self.port}",
+            script_to_run_arg, # Pass "main.py" as the argument
+            f"--listen={self.listen_host}", # Use listen_host for the --listen argument
+            f"--port={self.port}", 
             # Add any other essential ComfyUI arguments here
             # e.g., "--preview-method=auto"
         ]
         self.logger.info(f"Starting ComfyUI server with command: {' '.join(command)}")
+        self.logger.debug(f"Server CWD will be: {self.comfyui_path}")
+
 
         creation_flags = 0
         if platform.system() == "Windows":
+            # For Windows, CREATE_NEW_PROCESS_GROUP allows os.kill with CTRL_BREAK_EVENT
+            # to be sent to the entire process group, which is good for shutting down
+            # child processes that ComfyUI might spawn.
+            # CREATE_NO_WINDOW is not needed here as stdout/stderr are redirected.
             creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP
 
+
         try:
-            # Open the log file in append mode if you want to keep logs across restarts within a session
-            # or 'w' to overwrite for each start_server call. 'w' is simpler for now.
+            # Open the log file in 'w' mode to overwrite for each start_server call.
             with open(server_log_path, "w", encoding="utf-8") as comfy_log_file:
                 process = subprocess.Popen(
-                    command, # Use the full command list
-                    cwd=self.comfyui_path, # Set CWD to ComfyUI's root
+                    command,
+                    cwd=str(self.comfyui_path), # CRITICAL: Set CWD to ComfyUI's root path
                     stdout=comfy_log_file,
-                    stderr=subprocess.STDOUT,
+                    stderr=subprocess.STDOUT, # Redirect stderr to the same file as stdout
                     creationflags=creation_flags
+                    # start_new_session=True # On Linux/macOS, this makes the process group leader
                 )
             self.logger.info(f"ComfyUI server process started with PID: {process.pid}")
             self.server_process = process # Store the process
             return self.server_process
-        except FileNotFoundError: # Should be less likely with explicit path checks above
-            self.logger.error(f"Could not find 'main.py' or Python executable. Please check paths.", exc_info=True)
+        except FileNotFoundError: 
+            # This specific error is less likely now with the explicit path checks above,
+            # but kept for robustness. It would typically indicate python_executable itself is not found.
+            self.logger.error(f"Could not find Python executable '{self.python_executable}' or script '{script_to_run_arg}'. Please check paths.", exc_info=True)
             self.server_process = None
-            return None # Explicitly return None on failure
+            return None
         except Exception as e:
             self.logger.exception(f"An unhandled error occurred while trying to launch the ComfyUI server: {e}")
             self.server_process = None
-            return None # Explicitly return None on failure
+            return None
 
     def wait_for_server_availability(self, retries=120, delay=1.0) -> bool:
-        self.logger.info(f"Waiting for ComfyUI server to be available at http://{self.host}:{self.port}/")
+        self.logger.info(f"Waiting for ComfyUI server to be available at http://{self.connect_host}:{self.port}/ (ComfyUI instructed to listen on {self.listen_host}:{self.port})")
         for i in range(retries):
             try:
-                with socket.create_connection((self.host, self.port), timeout=1):
+                with socket.create_connection((self.connect_host, self.port), timeout=1): # Use connect_host
                     self.logger.info(f"✅ Server is available! (Attempt {i+1})")
                     return True
             except (socket.timeout, ConnectionRefusedError, OSError) as e:
                 if i % 10 == 0 : # Log less frequently during wait
-                    self.logger.debug(f"Server not yet available (attempt {i+1}/{retries}): {e}")
+                    self.logger.debug(f"Server not yet available (attempt {i+1}/{retries} on {self.connect_host}:{self.port}): {e}")
                 time.sleep(delay)
         
-        self.logger.error(f"Server at {self.host}:{self.port} did not become available after {retries * delay:.0f} seconds.")
+        self.logger.error(f"Server at {self.connect_host}:{self.port} did not become available after {retries * delay:.0f} seconds.")
         return False
 
     def shutdown_server(self): # No longer takes 'process' as an argument

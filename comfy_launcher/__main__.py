@@ -125,6 +125,13 @@ def main():
         logger.debug("Debug mode is ON.")
         # Log all settings if in debug mode for easier troubleshooting
         logger.debug(f"Full configuration loaded: {settings.model_dump_json(indent=2)}")
+    
+    # Determine listen and connect hosts
+    listen_host_for_comfyui = settings.HOST
+    connect_host_for_launcher = settings.EFFECTIVE_CONNECT_HOST
+
+    logger.info(f"ComfyUI will be instructed to listen on: {listen_host_for_comfyui}:{settings.PORT}")
+    logger.info(f"Launcher will attempt to connect to: {connect_host_for_launcher}:{settings.PORT}")
 
     server_log_path = settings.LOG_DIR / "server.log"
 
@@ -132,17 +139,17 @@ def main():
     current_server_manager = ServerManager(
         comfyui_path=settings.COMFYUI_PATH,
         python_executable=settings.PYTHON_EXECUTABLE,
-        host=settings.HOST,
+        listen_host=listen_host_for_comfyui,
+        connect_host=connect_host_for_launcher,
         port=settings.PORT,
         logger=logger
     )
     server_manager_instance = current_server_manager # Store for shutdown access
-
     gui_manager = GUIManager(
         app_name=settings.APP_NAME,
         window_width=settings.WINDOW_WIDTH,
         window_height=settings.WINDOW_HEIGHT,
-        host=settings.HOST,
+        connect_host=connect_host_for_launcher, # GUIManager uses this for webview.load_url
         port=settings.PORT,
         assets_dir=settings.ASSETS_DIR,
         logger=logger,

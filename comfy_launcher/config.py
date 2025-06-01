@@ -1,7 +1,8 @@
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import platform # Import the platform module
-from typing import Literal
+import re # For parsing resolv.conf
+from typing import Literal # For type hinting the theme preference
 # No need for set_key from dotenv if we are not saving from GUI
 
 DOTENV_PATH = Path(__file__).resolve().parent / '.env'
@@ -13,7 +14,7 @@ class Settings(BaseSettings):
     """
     DEBUG: bool = False
     COMFYUI_PATH: Path = Path(__file__).resolve().parent.parent.parent / "ComfyUI"
-    HOST: str = "127.0.0.1"
+    HOST: str = "127.0.0.1" # This is what ComfyUI will --listen on
     PORT: int = 8188
     LOG_DIR_NAME: str = "logs"
     MAX_LOG_FILES: int = 3
@@ -36,11 +37,37 @@ class Settings(BaseSettings):
     def LOG_DIR(self) -> Path:
         return self.LAUNCHER_ROOT / self.LOG_DIR_NAME
     @property
-    def PYTHON_EXECUTABLE(self) -> Path:
-        if platform.system() == "Windows":
-            return self.COMFYUI_PATH / ".venv" / "Scripts" / "python.exe"
-        else: # Linux, macOS, etc.
-            return self.COMFYUI_PATH / ".venv" / "bin" / "python"
+    def PYTHON_EXECUTABLE(self) -> Path: # type: ignore[override]
+        # Attempt to detect the Python executable within the ComfyUI .venv
+        # This is more robust for cross-environment scenarios (e.g., WSL accessing Windows venv)
+        
+        venv_path = self.COMFYUI_PATH / ".venv"
+        
+        # Potential paths for the Python executable
+        win_style_exec = venv_path / "Scripts" / "python.exe"
+        unix_style_exec = venv_path / "bin" / "python"
+        unix_style_exec3 = venv_path / "bin" / "python3" # Some Unix venvs might use python3
+
+        if win_style_exec.exists() and win_style_exec.is_file():
+            return win_style_exec
+        elif unix_style_exec.exists() and unix_style_exec.is_file():
+            return unix_style_exec
+        elif unix_style_exec3.exists() and unix_style_exec3.is_file():
+            return unix_style_exec3
+        else:
+            # Fallback to the original platform-based guess if no specific venv structure is found.
+            # ServerManager will log an error if this path is also invalid.
+            return win_style_exec if platform.system() == "Windows" else unix_style_exec
+    @property
+    def EFFECTIVE_CONNECT_HOST(self) -> str:
+        """
+        Determines the IP address the launcher should use to connect to ComfyUI
+        (In this reverted state, it simply returns the configured HOST value).
+        """
+        # This reverts to the simplest behavior: always use the HOST setting.
+        # If HOST is "127.0.0.1" and the launcher is in WSL,
+        # it will attempt to connect to WSL's own loopback.
+        return self.HOST
     @property
     def ASSETS_DIR(self) -> Path:
         return self.LAUNCHER_ROOT / "assets"
