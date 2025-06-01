@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Launching ComfyUI</title>
+  <style>
+    /* CSS content will be injected here by the Python script */
+    
+        body { margin: 0; padding: 20px; box-sizing: border-box; background-color: #1a1a1a; color: #f0f0f0; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; text-align: center; }
+        .container { padding: 40px; background-color: #242424; border-radius: 8px; max-width: 500px; }
+        .title { font-size: 1.8em; margin-bottom: 15px; } .accent { color: #0099ff; }
+        #status-message { margin-top: 15px; color: #aaa; min-height: 1.2em; }
+        .log-info { margin-top: 20px; font-size: 0.8em; color: #888; }
+        .log-info code { background-color: #333; padding: 3px 6px; border-radius: 3px; color: #ccc; word-break: break-all;}
+        .spinner { width: 50px; height: 50px; border: 5px solid #555; border-top-color: #0099ff; border-radius: 50%; margin: 0 auto 20px auto; animation: spin_simple 1.2s linear infinite; }
+        @keyframes spin_simple { to { transform: rotate(360deg); } }
+        #loader-wrapper { opacity: 1; } .fade-out { opacity: 0; transition: opacity 0.5s ease-out; }
+        
+  </style>
+</head>
+<body>
+  <div id="loader-wrapper">
+    <div class="container">
+      <div class="spinner"></div>
+      <div class="title">Launching <span class="accent">ComfyUI</span></div>
+      <p id="status-message">Initializing...</p>
+      
+      <div class="log-info">
+        <span>Server Log:</span>
+        <code id="log-file-path">...</code>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // JavaScript content will be injected here by the Python script
+    // This function will be called from Python to fade out the loader
+window.fadeOutLoading = function() {
+  const loader = document.getElementById("loader-wrapper");
+  if (loader) {
+    loader.classList.add("fade-out");
+  }
+};
+
+// This function will be called from Python to update the status message
+window.updateStatus = function(message) {
+  const statusEl = document.getElementById('status-message');
+  if (statusEl) {
+    statusEl.textContent = message;
+  }
+};
+
+// This function will be called from Python to set the log file path
+window.setLogPath = function(path) {
+  const logEl = document.getElementById('log-file-path');
+  if (logEl) {
+    logEl.textContent = path;
+  }
+};
+
+// --- ADD THIS NEW CODE ---
+// Listen for the F12 key to toggle developer tools
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'F12' || event.keyCode === 123) { // 123 is the keyCode for F12
+        event.preventDefault(); // Prevent default browser F12 behavior (opening its own devtools)
+        
+        // Call the Python function we exposed.
+        // pywebview might expose it directly on window or under window.pywebview.api
+        if (typeof window.py_toggle_devtools === 'function') {
+            window.py_toggle_devtools();
+        } else if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.py_toggle_devtools === 'function') {
+            window.pywebview.api.py_toggle_devtools();
+        } else {
+            console.warn('Python function "py_toggle_devtools" not found.');
+        }
+    }
+});
+  </script>
+</body>
+</html>

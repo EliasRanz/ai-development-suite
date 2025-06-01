@@ -1,0 +1,5 @@
+pydantic-settings>=2.0
+psutil>=5.0
+pywebview[edgechromium]>=4.0
+pytest # Add your testing framework
+# Add other direct dev tools if needed, e.g., linters, formatters

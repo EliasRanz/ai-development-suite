@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>ComfyUI Launcher - Error</title>
+    <link rel="stylesheet" href="assets/loading.css" />
+    <style>
+        /* Additional styles specific to the error page */
+        h1 {
+            color: #dc3545; /* A standard error red color */
+        }
+        p {
+            margin-top: 1em;
+            max-width: 600px;
+            color: #d0d0d0; /* Lighter text color for dark mode */
+            line-height: 1.6;
+        }
+        .error-wrapper {
+            text-align: center;
+            opacity: 0;
+            animation: fadeIn 1s ease-out forwards;
+        }
+    </style>
+</head>
+<body>
+    <div id="loader-wrapper" class="error-wrapper">
+        <div class="spinner" style="border-top-color: #dc3545;"></div>
+        <h1>Server Error</h1>
+        <p>
+            The ComfyUI server could not be started or did not become available.
+            Please check the latest log file in the <strong>launcher/logs</strong> directory
+            for more details and ensure ComfyUI is installed correctly.
+        </p>
+    </div>
+</body>
+</html>
