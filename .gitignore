@@ -21,14 +21,14 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST       # Standard for Python packages
+MANIFEST
 
 # Virtual environment
 ## Common virtual environment directory names
-.*venv/       # Catches .venv, .wsl_venv, etc.
-[Ee][Nn][Vv]/ # Catches env/, ENV/ (case-insensitive for the first letter)
-venv/         # Catches venv/ (if not starting with a dot)
-env.bak/      # Specific backup patterns
+.*venv/      
+[Ee][Nn][Vv]/
+venv/        
+env.bak/     
 venv.bak/
 ## Environment variable file (often at project root or in app directory)
 .env
