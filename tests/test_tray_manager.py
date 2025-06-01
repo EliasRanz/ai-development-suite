@@ -12,8 +12,9 @@ if str(project_root) not in sys.path:
 
 from comfy_launcher.tray_manager import TrayManager
 from comfy_launcher.gui_manager import GUIManager # For spec
-from pystray import Menu as TrayMenu, MenuItem as TrayMenuItem # For type checking menu items
+from pystray import Menu as TrayMenu, MenuItem as TrayMenuItem, Icon as TrayIcon # Import Icon as TrayIcon
 from PIL import Image # For mocking Image.open
+from comfy_launcher.event_system import AppEventType # For event testing - this import is present
 
 class TestTrayManager(unittest.TestCase):
 
@@ -51,59 +52,41 @@ class TestTrayManager(unittest.TestCase):
     def test_create_menu(self):
         menu = self.tray_manager._create_menu()
         self.assertIsInstance(menu, TrayMenu)
-        self.assertEqual(len(menu.items), 2)
+        self.assertEqual(len(menu.items), 1) # Only "Quit Application" now
 
-        self.assertIsInstance(menu.items[0], TrayMenuItem)
-        self.assertEqual(menu.items[0].text, "Show/Hide Window")
-        self.assertTrue(menu.items[0].enabled)
-        # To test the action, we'll execute it and check if the correct method on tray_manager is called.
-        # First, mock the target methods on the instance.
-        self.tray_manager._on_show_hide_window_selected = MagicMock(name="_on_show_hide_window_selected_mock")
+        # Mock the method on the instance BEFORE creating the menu that will use it for the action test
         self.tray_manager._on_quit_selected = MagicMock(name="_on_quit_selected_mock")
-
-        # Re-create the menu now that the methods on the instance are mocked
         menu_with_mocked_actions = self.tray_manager._create_menu()
-
-        # Execute the action stored in the first menu item
-        menu_with_mocked_actions.items[0]._action()
-        self.tray_manager._on_show_hide_window_selected.assert_called_once()
-
-        self.assertIsInstance(menu.items[1], TrayMenuItem)
-        self.assertEqual(menu.items[1].text, "Quit Application")
-        self.assertTrue(menu.items[1].enabled)
-        # Execute the action stored in the second menu item
-        menu_with_mocked_actions.items[1]._action()
+        # Test the "Quit Application" item (which is now items[0])
+        self.assertEqual(menu_with_mocked_actions.items[0].text, "Quit Application")
+        self.assertTrue(menu_with_mocked_actions.items[0].enabled)
+        # pystray.MenuItem.__call__ expects (icon, item)
+        mock_icon_for_action = MagicMock(spec=TrayIcon)
+        menu_with_mocked_actions.items[0](mock_icon_for_action) # Call with icon only
         self.tray_manager._on_quit_selected.assert_called_once()
-
-    def test_on_show_hide_window_selected_shows_hidden_window(self):
-        self.mock_gui_manager.webview_window = MagicMock()
-        # Simulate pywebview 4.0+ behavior where .hidden attribute exists
-        self.mock_gui_manager.webview_window.hidden = True 
-
-        self.tray_manager._on_show_hide_window_selected()
-
-        self.mock_gui_manager.webview_window.show.assert_called_once()
-        self.mock_gui_manager.webview_window.hide.assert_not_called()
-        self.mock_logger.info.assert_any_call("Tray: Showing window.")
-
-    def test_on_show_hide_window_selected_hides_visible_window(self):
-        self.mock_gui_manager.webview_window = MagicMock()
-        # Simulate pywebview 4.0+ behavior where .hidden attribute exists and is False
-        self.mock_gui_manager.webview_window.hidden = False
-
-        self.tray_manager._on_show_hide_window_selected()
-
-        self.mock_gui_manager.webview_window.hide.assert_called_once()
-        self.mock_gui_manager.webview_window.show.assert_not_called()
-        self.mock_logger.info.assert_any_call("Tray: Hiding window.")
 
     def test_on_quit_selected(self):
         self.tray_manager.icon = MagicMock() # Simulate icon exists
         self.tray_manager._on_quit_selected()
         self.mock_shutdown_event.set.assert_called_once()
         self.tray_manager.icon.stop.assert_called_once()
-        self.mock_logger.info.assert_any_call("Tray: Quit selected. Signaling application shutdown.")
+        self.mock_logger.info.assert_any_call("Tray: Quit selected. Setting global shutdown event and publishing APPLICATION_QUIT_REQUESTED event.")
 
+    @patch('comfy_launcher.tray_manager.event_publisher.publish')
+    def test_handle_application_quit_request_stops_icon_and_publishes_complete(self, mock_event_publish):
+        self.tray_manager.icon = MagicMock(spec=TrayIcon)
+        
+        # Simulate the event being handled
+        self.tray_manager.handle_application_quit_request()
+
+        self.tray_manager.icon.stop.assert_called_once()
+        # The TRAY_MANAGER_SHUTDOWN_COMPLETE event is published by the run() method when the thread ends, not this handler.
+        self.mock_logger.info.assert_any_call("Handler: APPLICATION_QUIT_REQUESTED received by TrayManager. Stopping tray icon.")
+
+    def test_handle_gui_window_hidden_updates_menu(self):
+        self.tray_manager.icon = MagicMock(spec=TrayIcon)
+        self.tray_manager.handle_gui_window_hidden()
+        self.tray_manager.icon.update_menu.assert_called_once()
 
     @patch('comfy_launcher.tray_manager.TrayIcon')
     @patch('comfy_launcher.tray_manager.Image.open')
@@ -126,7 +109,7 @@ class TestTrayManager(unittest.TestCase):
             self.app_name, mock_image_instance, self.app_name, "fake_menu"
         )
         mock_tray_icon_instance.run.assert_called_once()
-        self.mock_logger.info.assert_any_call("TrayManager: Starting tray icon event loop...")
+        self.mock_logger.info.assert_any_call("Starting tray icon event loop...")
 
     @patch('comfy_launcher.tray_manager.TrayIcon')
     @patch('comfy_launcher.tray_manager.Image.new') # Mock Image.new for fallback
@@ -156,9 +139,9 @@ class TestTrayManager(unittest.TestCase):
         mock_pystray_icon_class.side_effect = Exception("Pystray critical error")
         self.mock_shutdown_event.is_set.return_value = False # Ensure event is not already set
         self.tray_manager.run()
-        self.mock_logger.error.assert_any_call("TrayManager: Failed to run tray icon: Pystray critical error", exc_info=True)
+        self.mock_logger.error.assert_any_call("Failed to run tray icon: Pystray critical error", exc_info=True)
         self.mock_shutdown_event.set.assert_called_once()
-
+        self.mock_logger.info.assert_any_call("Signaling app shutdown due to critical tray error.")
     @patch('comfy_launcher.tray_manager.threading.Thread')
     def test_start_creates_and_starts_thread(self, mock_thread_class):
         mock_thread_instance = MagicMock()
@@ -169,7 +152,7 @@ class TestTrayManager(unittest.TestCase):
         mock_thread_class.assert_called_once_with(target=self.tray_manager.run, daemon=True, name="TrayIconThread")
         mock_thread_instance.start.assert_called_once()
         self.assertEqual(self.tray_manager._thread, mock_thread_instance)
-        self.mock_logger.info.assert_any_call("TrayManager: Thread started.")
+        self.mock_logger.info.assert_any_call("Thread started.")
 
     @patch('comfy_launcher.tray_manager.threading.Thread')
     def test_start_does_not_restart_alive_thread(self, mock_thread_class):
@@ -193,14 +176,14 @@ class TestTrayManager(unittest.TestCase):
 
         mock_icon_instance.stop.assert_called_once()
         mock_thread_instance.join.assert_called_once_with(timeout=2)
-        self.mock_logger.info.assert_any_call("TrayManager: Tray icon stopped.")
+        self.mock_logger.info.assert_any_call("Tray icon stopped.")
 
     def test_stop_no_icon_or_thread(self):
         self.tray_manager.icon = None
         self.tray_manager._thread = None
         self.tray_manager.stop() # Should not raise errors
-        self.mock_logger.info.assert_any_call("TrayManager: Stopping tray icon...")
-        self.mock_logger.info.assert_any_call("TrayManager: Tray icon stopped.")
+        self.mock_logger.info.assert_any_call("Stopping tray icon...")
+        self.mock_logger.info.assert_any_call("Tray icon stopped.")
 
 if __name__ == '__main__':
     unittest.main()

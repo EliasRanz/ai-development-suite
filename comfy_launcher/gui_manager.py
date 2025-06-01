@@ -8,13 +8,19 @@ import subprocess
 from typing import Literal, Optional # Added Optional
 
 if platform.system() == "Windows":
-    import winreg
+    try: import winreg
+    except ImportError: winreg = None # Handle cases where winreg might not be available even on Windows
 else:
     winreg = None
 
 from .config import settings
+from . import event_publisher, AppEventType # Import the global event publisher and event types
 
 class GUIManager:
+    # --- Constants for redirect loop ---
+    REDIRECT_LOOP_MAX_WAIT_TIME = 120  # seconds
+    REDIRECT_LOOP_CHECK_INTERVAL = 2  # seconds
+
     def __init__(self, app_name: str, window_width: int, window_height: int,
                  connect_host: str, port: int, assets_dir: Path, logger, server_manager):
         self.app_name = app_name
@@ -29,21 +35,45 @@ class GUIManager:
         self._loading_html_path: Optional[Path] = None
         self.is_window_loaded = threading.Event()
         self.is_window_shown = threading.Event() # Retained, might be useful
+        self.application_is_quitting = False # Flag to indicate if app is quitting
         self.initial_load_done = False # To track if the very first load_html is done
 
-    def _on_closing(self) -> bool:
+        # Subscribe to events
+        event_publisher.subscribe(AppEventType.APPLICATION_QUIT_REQUESTED, self.handle_application_quit_request)
+        event_publisher.subscribe(AppEventType.APPLICATION_CRITICAL_ERROR, self.handle_critical_error_event)
+        event_publisher.subscribe(AppEventType.SERVER_STOPPED_UNEXPECTEDLY, self.handle_server_stopped_unexpectedly_event)
+        event_publisher.subscribe(AppEventType.SHOW_WINDOW_REQUEST, self.handle_show_window_request)
+
+
+    def _on_closing(self, event=None) -> bool: # Added event parameter
         """
         Handles the window close event (e.g., user clicking 'X').
         Instead of quitting, it hides the window. The application continues
         running via the system tray.
-        Return True to prevent the default window close behavior.
+        Return True to prevent the default window close behavior, allowing
+        the event system to handle the actual shutdown and window destruction.
         """
-        self.logger.info("GUI Manager: Window close requested by user.")
+        if event and hasattr(event, 'cancel'): # pywebview might pass an event object
+            event.cancel = True # Prevent immediate closing if pywebview supports it this way
+
+        self.logger.info("Window close event received (_on_closing). Publishing APPLICATION_QUIT_REQUESTED.")
+        
+        # Ensure the application knows it's quitting.
+        # This flag is also set by handle_application_quit_request, but setting it here
+        # ensures that if _on_closing is somehow called before the event is processed,
+        # the state is correct.
+        self.application_is_quitting = True
+        
+        event_publisher.publish(AppEventType.APPLICATION_QUIT_REQUESTED)
+        
+        # Hide the window as per the original intent of the test for _on_closing
         if self.webview_window:
             self.webview_window.hide()
-            self.logger.info("GUI Manager: Window hidden. Application continues in tray.")
-        return True # Prevent default webview close behavior
-
+        
+        # Return True to prevent pywebview from closing the window immediately.
+        # The actual window destruction will be handled by `handle_application_quit_request`
+        # which is subscribed to the APPLICATION_QUIT_REQUESTED event.
+        return True
     def on_loaded(self): # Renamed from _on_loaded to match event subscription
         self.logger.info("🎉 Webview 'on_loaded' event fired!")
         current_url = self.webview_window.get_current_url() if self.webview_window else "N/A"
@@ -51,7 +81,8 @@ class GUIManager:
 
         if not self.initial_load_done:
             # This is the first load (e.g. loading.html)
-            self.logger.debug("Signaling that initial window content is loaded.")
+            self.logger.debug("Initial window content loaded. Publishing GUI_WINDOW_CONTENT_LOADED event.")
+            event_publisher.publish(AppEventType.GUI_WINDOW_CONTENT_LOADED)
             self.is_window_loaded.set()
             self.initial_load_done = True
         else:
@@ -65,6 +96,7 @@ class GUIManager:
 
     def on_shown(self): # Renamed from _on_shown
         self.logger.debug("Webview 'shown' event fired. Window is visible on screen.")
+        event_publisher.publish(AppEventType.GUI_WINDOW_SHOWN)
         if not self.is_window_shown.is_set():
           self.is_window_shown.set()
 
@@ -110,7 +142,15 @@ class GUIManager:
             with open(asset_path, "r", encoding="utf-8") as f: return f.read()
         except FileNotFoundError:
             self.logger.error(f"Asset file not found: {asset_path}")
-            return f"/* Critical asset {relative_path} is missing. */" if is_critical_fallback else ""
+            if is_critical_fallback:
+                # Return a more user-friendly HTML fallback for critical assets
+                self.logger.critical(f"Critical asset '{relative_path}' not found, and no fallback content available other than the hardcoded one.")
+                return """<!DOCTYPE html><html><head><title>Error</title><style>body{font-family:sans-serif;text-align:center;padding:40px;background-color:#333;color:#fff;}h1{color:red;}</style></head>
+                        <body><h1>Critical Error</h1>
+                        <p>If you're seeing this, the application encountered a severe issue and could not load a required file.</p>
+                        <p>Please check the launcher logs for more details.</p>
+                        </body></html>"""
+            return ""
         except Exception as e:
             self.logger.exception(f"Error reading asset file {asset_path}: {e}")
             return ""
@@ -138,7 +178,12 @@ class GUIManager:
 
     def _execute_js(self, js_code: str):
         if self.webview_window:
-            self.webview_window.evaluate_js(js_code)
+            try:
+                self.webview_window.evaluate_js(js_code)
+            except Exception as e:
+                self.logger.error(f"Error executing JavaScript in webview: {e}", exc_info=True)
+        else:
+            self.logger.debug("Cannot execute JS, webview_window is None.")
 
     def set_status(self, message: str):
         self.logger.info(f"[GUI STATUS] {message}")
@@ -146,7 +191,7 @@ class GUIManager:
         self._execute_js(f"if(typeof window.updateStatus === 'function') window.updateStatus('{escaped_message}');")
 
     def py_toggle_devtools(self):
-        if self.webview_window:
+        if self.webview_window: # pragma: no branch
             if settings.DEBUG: self.webview_window.toggle_devtools()
             else: self.logger.info("Developer Tools are disabled (DEBUG mode is off).")
 
@@ -157,7 +202,8 @@ class GUIManager:
             self.logger.info("🪟 Creating GUI window by loading HTML content directly...")
             self.webview_window = webview.create_window(
                 self.app_name, html=html_content, width=self.window_width,
-                height=self.window_height, resizable=True
+                height=self.window_height, resizable=True,
+                confirm_close=False # Avoid pywebview's own confirm dialog; we handle hide/close in _on_closing
             )
             self.webview_window.events.loaded += self.on_loaded
             self.webview_window.events.shown += self.on_shown
@@ -168,11 +214,30 @@ class GUIManager:
                 except Exception as e: self.logger.error(f"Failed to expose py_toggle_devtools: {e}")
             self.logger.info("✅ Window created. Events subscribed & functions exposed.")
         except Exception as e:
-            self.logger.critical(f"GUI Manager: CRITICAL - Failed to create or launch window: {e}", exc_info=True)
+            self.logger.critical(f"CRITICAL - Failed to create or launch window: {e}", exc_info=True)
             if shutdown_event_for_critical_error:
                 shutdown_event_for_critical_error.set()
             # Re-raise or handle as appropriate, for now, it will propagate up if not caught by main
             raise
+
+    def handle_application_quit_request(self):
+        """
+        Handler for the APPLICATION_QUIT_REQUESTED event.
+        Sets the quitting flag and attempts to close the window programmatically to trigger its destruction.
+        """
+        self.logger.info("GUIManager Handler: APPLICATION_QUIT_REQUESTED received. Proceeding with window destruction.")
+        self.application_is_quitting = True
+        
+        window_to_destroy = self.webview_window
+        if window_to_destroy:
+            try:
+                self.logger.debug(f"Destroying window: {window_to_destroy}")
+                self.webview_window = None # Nullify before destroying
+                window_to_destroy.destroy() # Call destroy() on the window instance
+                self.logger.info("Webview window destroyed by handle_application_quit_request.")
+            except Exception as e:
+                self.logger.error(f"Error destroying window in handle_application_quit_request: {e}", exc_info=True)
+        # No need to call window.close() JS anymore, as this handler now directly destroys.
 
     def load_error_page(self, message: str):
         self.logger.error(f"Loading error page with message: {message}")
@@ -211,49 +276,76 @@ class GUIManager:
 
     def redirect_when_ready_loop(self, stop_event: threading.Event,
                                  overall_shutdown_event: threading.Event):
-        self.logger.info("Redirect Loop: Started.")
-        max_wait_time = 120
-        check_interval = 2
+        self.logger.info("Redirect loop: Started.")
         start_time = time.time()
 
         while not stop_event.is_set() and not overall_shutdown_event.is_set():
-            if time.time() - start_time > max_wait_time:
-                self.logger.warning("Redirect Loop: Max wait time exceeded for server availability.")
+            if time.time() - start_time > self.REDIRECT_LOOP_MAX_WAIT_TIME:
+                self.logger.warning("Redirect loop: Max wait time exceeded for server availability.")
                 if not overall_shutdown_event.is_set(): # Avoid changing page if already shutting down
                     self.load_error_page("ComfyUI server did not become available in time. Please check server logs.")
                 break
 
             # Call wait_for_server_availability without the timeout argument
-            if self.server_manager.wait_for_server_availability():
+            if self.server_manager.wait_for_server_availability(retries=1, delay=0.1): # Use small retry/delay for quick check
                 target_url = f"http://{self.connect_host}:{self.port}"
-                self.logger.info(f"Redirect Loop: Server is available. Redirecting webview to {target_url}")
+                self.logger.info(f"Redirect loop: Server is available. Attempting to redirect webview to {target_url}")
                 if self.webview_window:
                     self._execute_js("if(typeof window.fadeOutLoading === 'function') window.fadeOutLoading();")
                     time.sleep(1.5) # Give fade out animation time
                     if not overall_shutdown_event.is_set(): # Check again before loading URL
                         self.webview_window.load_url(target_url)
                 else:
-                    self.logger.error("Redirect Loop: Webview window is not available for redirection.")
+                    self.logger.error("Redirect loop: Webview window is not available for redirection.")
+                self.set_status("Connected to ComfyUI.") # Set status on successful connection
                 break
             else:
                 # Update log message to reflect the actual retry interval
-                self.logger.debug(f"Redirect Loop: Server not yet available. Retrying in {check_interval}s...")
+                self.logger.debug(f"Redirect loop: Server not yet available. Retrying in {self.REDIRECT_LOOP_CHECK_INTERVAL}s...")
 
             if not self.webview_window or getattr(self.webview_window, 'gui', None) is None:
-                self.logger.info("Redirect Loop: Webview window no longer exists. Stopping.")
+                self.logger.info("Redirect loop: Webview window no longer exists. Stopping.")
                 break
             # Wait for 'check_interval', breaking if stop_event is set.
             # The main while loop condition handles overall_shutdown_event.
-            if stop_event.wait(check_interval):
-                self.logger.info("Redirect Loop: stop_event set during wait. Exiting loop.")
+            if stop_event.wait(self.REDIRECT_LOOP_CHECK_INTERVAL):
+                self.logger.info("Redirect loop: stop_event set during wait. Exiting loop.")
                 break
-        self.logger.info("Redirect Loop: Exiting.")
+        self.logger.info("Redirect loop: Exiting.")
 
 
     def start_webview_blocking(self):
         if self.webview_window:
             self.logger.debug("Starting webview event loop (blocking)...")
-            webview.start(debug=settings.DEBUG, private_mode=False, http_server=True)
+            webview.start(debug=settings.DEBUG, private_mode=False, http_server=False) # Diagnostic change
             self.logger.debug("Webview event loop finished.")
         else:
             self.logger.error("Cannot start webview: window was not created.")
+
+    # --- Event Handlers ---
+    def handle_critical_error_event(self, message: str):
+        self.logger.info(f"Event Handler: Received APPLICATION_CRITICAL_ERROR: {message}")
+        self.load_critical_error_page(message)
+
+    def handle_server_stopped_unexpectedly_event(self, pid: int, returncode: int):
+        # Import app_shutdown_event locally to avoid circular dependency at module level if __main__ imports GUIManager
+        from comfy_launcher.__main__ import app_shutdown_event as global_app_shutdown_event
+        if global_app_shutdown_event.is_set():
+            self.logger.info(f"Event Handler: Received SERVER_STOPPED_UNEXPECTEDLY (PID: {pid}, Code: {returncode}), but app is already shutting down. No error page displayed.")
+            return
+        
+        self.logger.error(f"Event Handler: Received SERVER_STOPPED_UNEXPECTEDLY (PID: {pid}, Code: {returncode}). Displaying error page.")
+        error_message = f"ComfyUI server (PID: {pid}) stopped unexpectedly with code {returncode}. Check server.log."
+        self.load_error_page(error_message)
+
+    def handle_show_window_request(self):
+        self.logger.info("Event Handler: Received SHOW_WINDOW_REQUEST. Attempting to show and activate GUI window.")
+        if self.webview_window:
+            self.webview_window.show()
+            if hasattr(self.webview_window, 'activate'): # Some platforms might not have activate
+                self.webview_window.activate()
+            # Publishing SHOW_WINDOW_REQUEST_RELAYED_TO_GUI is not strictly necessary if this is the final handler
+            # but can be useful for logging or if other components need to know.
+            # event_publisher.publish(AppEventType.SHOW_WINDOW_REQUEST_RELAYED_TO_GUI)
+        else:
+            self.logger.warning("Event Handler: Received SHOW_WINDOW_REQUEST, but webview_window is None. Cannot show.")

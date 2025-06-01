@@ -79,3 +79,4 @@ htmlcov/
 *.bak
 *.tmp
 gemini-context.md
+*.bat

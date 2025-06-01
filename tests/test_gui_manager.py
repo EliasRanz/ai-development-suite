@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch, MagicMock, call, mock_open
+from unittest.mock import patch, MagicMock, call, mock_open, ANY
 from pathlib import Path
 import threading
 import time 
@@ -13,6 +13,7 @@ if str(project_root) not in sys.path:
 
 from comfy_launcher.gui_manager import GUIManager
 from comfy_launcher.config import settings # Using the actual settings object
+from comfy_launcher.event_system import AppEventType # For testing event publishing
 
 import logging
 logging.disable(logging.CRITICAL)
@@ -250,7 +251,8 @@ class TestGuiManager(unittest.TestCase):
                 html="<html>Mocked Content</html>",
                 width=self.gui_manager.window_width,
                 height=self.gui_manager.window_height,
-                resizable=True
+                resizable=True,
+                confirm_close=False 
             )
             loaded_event_mock.__iadd__.assert_called_with(self.gui_manager.on_loaded)
             shown_event_mock.__iadd__.assert_called_with(self.gui_manager.on_shown)
@@ -278,7 +280,7 @@ class TestGuiManager(unittest.TestCase):
         self.gui_manager.on_loaded()
 
         self.assertTrue(self.gui_manager.is_window_loaded.is_set())
-        self.mock_logger.debug.assert_any_call("Signaling that initial window content is loaded.")
+        self.mock_logger.debug.assert_any_call("Initial window content loaded. Publishing GUI_WINDOW_CONTENT_LOADED event.")
 
     def test_on_loaded_subsequent_times_settings_page(self):
         self.gui_manager.is_window_loaded.set() 
@@ -312,13 +314,13 @@ class TestGuiManager(unittest.TestCase):
         self.gui_manager.webview_window = MagicMock() 
         with patch('comfy_launcher.gui_manager.settings.DEBUG', True):
             self.gui_manager.start_webview_blocking()
-            mock_webview_module.start.assert_called_once_with(debug=True, private_mode=False, http_server=True)
+            mock_webview_module.start.assert_called_once_with(debug=True, private_mode=False, http_server=False)
 
         mock_webview_module.start.reset_mock() 
         
         with patch('comfy_launcher.gui_manager.settings.DEBUG', False):
             self.gui_manager.start_webview_blocking()
-            mock_webview_module.start.assert_called_once_with(debug=False, private_mode=False, http_server=True)
+            mock_webview_module.start.assert_called_once_with(debug=False, private_mode=False, http_server=False)
 
     def test_py_toggle_devtools_debug_true(self):
         self.gui_manager.webview_window = MagicMock() 
@@ -333,6 +335,176 @@ class TestGuiManager(unittest.TestCase):
             self.gui_manager.py_toggle_devtools()
             self.gui_manager.webview_window.toggle_devtools.assert_not_called()
             self.mock_logger.info.assert_any_call("Developer Tools are disabled (DEBUG mode is off).")
+
+    @patch('comfy_launcher.gui_manager.event_publisher.publish')
+    def test_on_closing_event_handler(self, mock_event_publish):
+        self.gui_manager.webview_window = MagicMock(name="MockWebviewWindow")
+        mock_gui_event = MagicMock(name="MockGuiClosingEvent")
+        mock_gui_event.cancel = MagicMock()
+
+        self.gui_manager._on_closing(event=mock_gui_event) # Pass as keyword arg
+
+        self.assertEqual(mock_gui_event.cancel, True, "event.cancel should have been set to True")
+        self.gui_manager.webview_window.hide.assert_called_once()
+        mock_event_publish.assert_called_once_with(AppEventType.APPLICATION_QUIT_REQUESTED)
+        self.mock_logger.info.assert_called_once_with(
+            "Window close event received (_on_closing). Publishing APPLICATION_QUIT_REQUESTED."
+        )
+        # Ensure is_window_shown is cleared
+        self.assertFalse(self.gui_manager.is_window_shown.is_set(), "is_window_shown should be cleared when window is hidden.")
+
+    def test_on_shown_handler(self):
+        self.gui_manager.is_window_shown.clear() # Ensure it's not set initially
+        
+        self.gui_manager.on_shown() # The method being tested
+
+        self.assertTrue(self.gui_manager.is_window_shown.is_set())
+        self.mock_logger.debug.assert_called_once_with("Webview 'shown' event fired. Window is visible on screen.")
+
+    @patch('comfy_launcher.gui_manager.event_publisher.publish') # If it publishes events
+    def test_handle_critical_error_event_loads_page(self, mock_event_publish):
+        test_error_message = "Something went terribly wrong!"
+        self.gui_manager.load_critical_error_page = MagicMock() # Mock the method that loads the page
+
+        # Simulate the event being handled
+        self.gui_manager.handle_critical_error_event(message=test_error_message)
+
+        self.gui_manager.load_critical_error_page.assert_called_once_with(test_error_message)
+        self.mock_logger.info.assert_any_call(f"Event Handler: Received APPLICATION_CRITICAL_ERROR: {test_error_message}")
+
+    # Patch where app_shutdown_event is imported and used within the SUT method
+    @patch('comfy_launcher.__main__.app_shutdown_event') 
+    def test_handle_server_stopped_unexpectedly_event_not_shutting_down(self, mock_app_shutdown_event):
+        mock_app_shutdown_event.is_set.return_value = False
+        self.gui_manager.load_error_page = MagicMock()
+        test_pid = 123
+        test_returncode = 1
+
+        self.gui_manager.handle_server_stopped_unexpectedly_event(pid=test_pid, returncode=test_returncode)
+
+        expected_message = f"ComfyUI server (PID: {test_pid}) stopped unexpectedly with code {test_returncode}. Check server.log."
+        self.gui_manager.load_error_page.assert_called_once_with(expected_message)
+        self.mock_logger.error.assert_any_call(f"Event Handler: Received SERVER_STOPPED_UNEXPECTEDLY (PID: {test_pid}, Code: {test_returncode}). Displaying error page.")
+
+    @patch('comfy_launcher.__main__.app_shutdown_event')
+    def test_handle_server_stopped_unexpectedly_event_already_shutting_down(self, mock_app_shutdown_event):
+        mock_app_shutdown_event.is_set.return_value = True
+        self.gui_manager.load_error_page = MagicMock()
+        test_pid = 456
+        test_returncode = 0
+
+        self.gui_manager.handle_server_stopped_unexpectedly_event(pid=test_pid, returncode=test_returncode)
+
+        self.gui_manager.load_error_page.assert_not_called()
+        self.mock_logger.info.assert_any_call(f"Event Handler: Received SERVER_STOPPED_UNEXPECTEDLY (PID: {test_pid}, Code: {test_returncode}), but app is already shutting down. No error page displayed.")
+
+    @patch('comfy_launcher.gui_manager.event_publisher.publish')
+    def test_handle_show_window_request_window_exists(self, mock_event_publish):
+        self.gui_manager.webview_window = MagicMock(name="MockWebviewWindow")
+        self.gui_manager.webview_window.activate = MagicMock() # Ensure activate method exists
+
+        self.gui_manager.handle_show_window_request()
+
+        self.gui_manager.webview_window.show.assert_called_once()
+        self.gui_manager.webview_window.activate.assert_called_once()
+        # Publishing SHOW_WINDOW_REQUEST_RELAYED_TO_GUI is optional in SUT, so don't assert strictly
+        # mock_event_publish.assert_called_once_with(AppEventType.SHOW_WINDOW_REQUEST_RELAYED_TO_GUI)
+        self.mock_logger.info.assert_any_call("Event Handler: Received SHOW_WINDOW_REQUEST. Attempting to show and activate GUI window.")
+
+    @patch('comfy_launcher.gui_manager.event_publisher.publish')
+    def test_handle_show_window_request_window_none(self, mock_event_publish):
+        self.gui_manager.webview_window = None
+
+        self.gui_manager.handle_show_window_request()
+
+        mock_event_publish.assert_not_called() # Should not relay if no window
+        self.mock_logger.warning.assert_any_call("Event Handler: Received SHOW_WINDOW_REQUEST, but webview_window is None. Cannot show.")
+
+    @patch('comfy_launcher.gui_manager.time.sleep', return_value=None) # Mock sleep to speed up test
+    def test_redirect_loop_server_available_redirects_and_sets_status(self, mock_sleep):
+        self.gui_manager.webview_window = MagicMock()
+        self.gui_manager.webview_window.load_url = MagicMock()
+        self.gui_manager.set_status = MagicMock()
+        self.mock_server_manager.wait_for_server_availability.return_value = True
+        
+        mock_redirect_stop_event = threading.Event()
+        mock_shutdown_event = threading.Event()
+
+        # To exit the loop after one successful iteration
+        self.gui_manager.webview_window.load_url.side_effect = lambda url: mock_redirect_stop_event.set()
+
+        self.gui_manager.redirect_when_ready_loop(mock_redirect_stop_event, mock_shutdown_event)
+
+        # The SUT calls wait_for_server_availability with specific retries/delay now
+        self.mock_server_manager.wait_for_server_availability.assert_called_once_with(retries=1, delay=0.1)
+        self.gui_manager.webview_window.load_url.assert_called_once_with(f"http://{self.gui_manager.connect_host}:{self.gui_manager.port}")
+        self.gui_manager.set_status.assert_called_with("Connected to ComfyUI.")
+        self.mock_logger.info.assert_any_call(f"Redirect loop: Server is available. Attempting to redirect webview to http://{self.gui_manager.connect_host}:{self.gui_manager.port}")
+
+    @patch('comfy_launcher.gui_manager.time.sleep', return_value=None)
+    @patch.object(GUIManager, 'load_error_page') # Patch the method
+    def test_redirect_loop_server_timeout_sets_error_status(self, mock_load_error_page, mock_sleep):
+        self.gui_manager.webview_window = MagicMock()
+        self.gui_manager.webview_window.load_url = MagicMock()
+        self.gui_manager.set_status = MagicMock()
+        self.mock_server_manager.wait_for_server_availability.return_value = False # Simulate timeout
+
+        mock_redirect_stop_event = threading.Event()
+        mock_shutdown_event = threading.Event()
+
+        # To exit the loop after one failed iteration
+        # The loop now has a max_wait_time, so we can let it timeout naturally or force stop_event
+        self.gui_manager.REDIRECT_LOOP_MAX_WAIT_TIME = 0.1 # Force quick timeout for test
+        # self.mock_server_manager.wait_for_server_availability.side_effect = lambda **kwargs: mock_redirect_stop_event.set() or False
+
+        self.gui_manager.redirect_when_ready_loop(mock_redirect_stop_event, mock_shutdown_event)
+
+        self.gui_manager.webview_window.load_url.assert_not_called()
+        mock_load_error_page.assert_called_with("ComfyUI server did not become available in time. Please check server logs.")
+        self.mock_logger.warning.assert_any_call("Redirect loop: Max wait time exceeded for server availability.")
+
+    def test_get_asset_content_file_not_found_non_critical(self):
+        # Mock assets_dir to control path resolution
+        mock_assets_dir = MagicMock(spec=Path)
+        mock_non_existent_path = MagicMock(spec=Path)
+        mock_non_existent_path.exists.return_value = False
+        mock_non_existent_path.name = "non_existent.js" # For logging
+        mock_assets_dir.__truediv__.return_value = mock_non_existent_path
+        self.gui_manager.assets_dir = mock_assets_dir
+
+        content = self.gui_manager._get_asset_content("non_existent.js")
+
+        self.assertEqual(content, "")
+        self.mock_logger.error.assert_any_call(f"Asset file not found: {mock_non_existent_path}")
+
+    def test_get_asset_content_file_not_found_critical_fallback(self):
+        mock_assets_dir = MagicMock(spec=Path)
+        mock_non_existent_path = MagicMock(spec=Path)
+        mock_non_existent_path.exists.return_value = False
+        mock_non_existent_path.name = "critical_asset.html"
+        mock_assets_dir.__truediv__.return_value = mock_non_existent_path
+        self.gui_manager.assets_dir = mock_assets_dir
+
+        content = self.gui_manager._get_asset_content("critical_asset.html", is_critical_fallback=True)
+
+        self.assertIn("<h1>Critical Error</h1>", content) # Check for part of the fallback HTML
+        self.assertIn("If you're seeing this, the application encountered a severe issue", content)
+        self.mock_logger.error.assert_any_call(f"Asset file not found: {mock_non_existent_path}")
+        self.mock_logger.critical.assert_any_call(f"Critical asset 'critical_asset.html' not found, and no fallback content available other than the hardcoded one.")
+
+    def test_execute_js_no_window(self):
+        self.gui_manager.webview_window = None
+        self.gui_manager._execute_js("console.log('test');")
+        self.mock_logger.debug.assert_any_call("Cannot execute JS, webview_window is None.")
+
+    def test_execute_js_webview_error(self):
+        self.gui_manager.webview_window = MagicMock()
+        self.gui_manager.webview_window.evaluate_js.side_effect = Exception("JS execution failed")
+        
+        self.gui_manager._execute_js("test_function();")
+        
+        self.mock_logger.error.assert_any_call("Error executing JavaScript in webview: JS execution failed", exc_info=True)
+
 
 if __name__ == '__main__':
     unittest.main()

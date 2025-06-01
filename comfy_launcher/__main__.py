@@ -5,21 +5,25 @@ import logging
 from typing import TYPE_CHECKING, Optional
 from pathlib import Path # Ensure Path is imported
 
-from .config import settings
-from .logger_setup import setup_launcher_logger, rotate_and_cleanup_logs
+from .config import settings # Assuming settings is still globally available or passed
+from .log_manager import LogManager # Import the new LogManager
 from .gui_manager import GUIManager
+from . import event_publisher, AppEventType # Import the global event publisher
 from .server_manager import ServerManager
 from .tray_manager import TrayManager
 
 # Define logger and other global instances, initialized in main()
 launcher_logger: logging.Logger = None # type: ignore
 gui_manager_instance: Optional[GUIManager] = None
+log_manager_instance: Optional[LogManager] = None # Add LogManager instance
 server_manager_instance: Optional[ServerManager] = None
 tray_manager_instance: Optional[TrayManager] = None
 app_logic_thread_instance: Optional[threading.Thread] = None
 
 # Global event to signal application-wide shutdown
-app_shutdown_event = threading.Event()
+app_shutdown_event = threading.Event() # Main shutdown signal
+_app_logic_completed_event = threading.Event() # For main to wait for app_logic_thread
+_tray_manager_completed_event = threading.Event() # For main to wait for tray_manager_thread
 
 
 if TYPE_CHECKING:
@@ -34,6 +38,35 @@ if TYPE_CHECKING:
 else:
     LoggerType = logging.Logger
 
+# --- Main Thread Event Handlers (defined at module level) ---
+def _handle_main_thread_quit_request():
+    if launcher_logger: # Check if logger is initialized
+        launcher_logger.info("MainThread Handler: APPLICATION_QUIT_REQUESTED received. Ensuring app_shutdown_event is set.")
+    app_shutdown_event.set()
+
+def _handle_critical_error(message: str):
+    if launcher_logger:
+        launcher_logger.critical(f"MainThread Handler: APPLICATION_CRITICAL_ERROR: {message}")
+    if gui_manager_instance: # Check if GUI manager exists to show error
+        gui_manager_instance.load_critical_error_page(message)
+    app_shutdown_event.set() # Always set shutdown event on critical error
+
+def _handle_server_stopped_unexpectedly(pid: int, returncode: int):
+    message = f"ComfyUI server (PID: {pid}) stopped unexpectedly with code {returncode}. Check server.log."
+    if launcher_logger:
+        launcher_logger.error(f"MainThread Handler: SERVER_STOPPED_UNEXPECTEDLY: {message}")
+    if gui_manager_instance and not app_shutdown_event.is_set(): # Avoid changing page if already quitting
+        gui_manager_instance.load_error_page(message) # Use non-critical error page
+    app_shutdown_event.set() # Ensure main shutdown sequence is triggered
+
+def _handle_app_logic_shutdown_complete():
+    if launcher_logger:
+        launcher_logger.info("MainThread Handler: APP_LOGIC_SHUTDOWN_COMPLETE received.")
+    _app_logic_completed_event.set()
+def _handle_tray_manager_shutdown_complete():
+    if launcher_logger:
+        launcher_logger.info("MainThread Handler: TRAY_MANAGER_SHUTDOWN_COMPLETE received.")
+    _tray_manager_completed_event.set()
 
 def custom_excepthook(exc_type, exc_value, exc_traceback):
     global launcher_logger # Use the global logger from this module
@@ -53,29 +86,40 @@ def app_logic_thread_func(
     server_log_path: 'Path', # Use Path directly
     shutdown_event_param: threading.Event # Added shutdown event
 ):
-    app_logger.info("BACKGROUND THREAD: Started.")
+    # Event to signal that GUI content (loading.html) is loaded
+    # This replaces waiting directly on gui_manager.is_window_loaded
+    _gui_initial_content_loaded_event = threading.Event()
+
+    def _handle_gui_content_loaded():
+        app_logger.info("AppLogic Handler: GUI_WINDOW_CONTENT_LOADED received.")
+        _gui_initial_content_loaded_event.set()
+
+    event_publisher.subscribe(AppEventType.GUI_WINDOW_CONTENT_LOADED, _handle_gui_content_loaded)
+    # No explicit subscription to APPLICATION_QUIT_REQUESTED here, as this thread
+    # primarily relies on the shutdown_event_param (global app_shutdown_event)
+    # which will be set by TrayManager when it publishes the event.
+
+    app_logger.info("Started.")
     server_process = None
     redirect_thread = None
     redirect_thread_stop_event = threading.Event()
 
     try:
-        app_logger.info("BACKGROUND THREAD: Waiting for GUI window to finish loading content...")
-        if not gui_manager.is_window_loaded.wait(timeout=20):
-            app_logger.error("BACKGROUND THREAD: GUI window did not signal 'loaded' in time. Aborting app logic.")
-            if not shutdown_event_param.is_set():
-                gui_manager.load_critical_error_page("GUI did not load correctly. Check launcher logs.")
-            shutdown_event_param.set()
+        app_logger.info("Waiting for GUI window to finish loading initial content (via event)...")
+        if not _gui_initial_content_loaded_event.wait(timeout=20):
+            app_logger.error("GUI window did not signal 'loaded' in time. Aborting app logic.")
+            event_publisher.publish(AppEventType.APPLICATION_CRITICAL_ERROR, message="GUI did not load correctly. Check launcher logs.")
             return
         if shutdown_event_param.is_set(): return
 
-        app_logger.info("BACKGROUND THREAD: GUI content loaded. Proceeding with server launch sequence.")
+        app_logger.info("GUI content loaded. Proceeding with server launch sequence.")
         gui_manager.set_status("Initializing...")
         if shutdown_event_param.wait(0.5): return
 
         if shutdown_event_param.is_set(): return
         gui_manager.set_status(f"Clearing network port {settings.PORT}...")
         if not current_server_manager.kill_process_on_port():
-            app_logger.warning(f"BACKGROUND THREAD: Failed to kill process on port {settings.PORT}. Server start might fail if port is busy.")
+            app_logger.warning(f"Failed to kill process on port {settings.PORT}. Server start might fail if port is busy.")
         if shutdown_event_param.wait(0.5): return
 
         if shutdown_event_param.is_set(): return
@@ -83,14 +127,13 @@ def app_logic_thread_func(
         server_process = current_server_manager.start_server(server_log_path)
 
         if not server_process:
-            app_logger.error("BACKGROUND THREAD: Failed to start ComfyUI server process. Aborting app logic.")
-            if not shutdown_event_param.is_set():
-                gui_manager.load_error_page("Could not start the ComfyUI server. Please check the server.log file for details.")
-            shutdown_event_param.set()
+            app_logger.error("Failed to start ComfyUI server process. Aborting app logic.")
+            # Publishing an error event might be more appropriate here if other components need to react
+            event_publisher.publish(AppEventType.APPLICATION_CRITICAL_ERROR, message="Could not start the ComfyUI server. Please check the server.log file for details.")
             return
         if shutdown_event_param.is_set(): return
 
-        app_logger.info(f"BACKGROUND THREAD: ComfyUI server process started with PID: {server_process.pid}.")
+        app_logger.info(f"ComfyUI server process started with PID: {server_process.pid}.")
 
         redirect_thread = threading.Thread(
             target=gui_manager.redirect_when_ready_loop,
@@ -98,45 +141,66 @@ def app_logic_thread_func(
             daemon=True
         )
         redirect_thread.start()
-        app_logger.info("BACKGROUND THREAD: Redirection loop initiated.")
+        app_logger.info("Redirection loop initiated.")
 
-        app_logger.info("BACKGROUND THREAD: Now monitoring server process and shutdown event.")
+        app_logger.info("Now monitoring server process and shutdown event.")
         while not shutdown_event_param.is_set():
             if server_process.poll() is not None:
-                app_logger.info(f"BACKGROUND THREAD: ComfyUI server process (PID: {server_process.pid}) has exited with code {server_process.returncode}.")
-                if not shutdown_event_param.is_set():
-                    gui_manager.load_error_page(f"ComfyUI server (PID: {server_process.pid}) stopped unexpectedly. Check server.log.")
-                shutdown_event_param.set()
+                app_logger.info(f"ComfyUI server process (PID: {server_process.pid}) has exited with code {server_process.returncode}.")
+                # Publish an event indicating unexpected server stop
+                if not shutdown_event_param.is_set(): # Only publish if not already shutting down
+                    event_publisher.publish(AppEventType.SERVER_STOPPED_UNEXPECTEDLY, pid=server_process.pid, returncode=server_process.returncode)
+                    shutdown_event_param.set() # Also trigger local shutdown for this thread
                 break
             if shutdown_event_param.wait(timeout=1):
                 break
 
     except Exception as e:
-        app_logger.error(f"BACKGROUND THREAD: An error occurred: {e}", exc_info=True)
+        app_logger.error(f"An error occurred: {e}", exc_info=True)
         if not shutdown_event_param.is_set():
-            gui_manager.load_critical_error_page(f"An unexpected error occurred in the background process: {str(e)}")
-        shutdown_event_param.set()
+            event_publisher.publish(AppEventType.APPLICATION_CRITICAL_ERROR, message=f"An unexpected error occurred in the background process: {str(e)}")
     finally:
-        app_logger.info("BACKGROUND THREAD: Cleaning up...")
+        app_logger.info("Cleaning up...")
         redirect_thread_stop_event.set()
 
         if redirect_thread and redirect_thread.is_alive():
-            app_logger.info("BACKGROUND THREAD: Waiting for redirect thread to join...")
+            app_logger.info("Waiting for redirect thread to join...")
             redirect_thread.join(timeout=3)
 
         if current_server_manager and server_process and server_process.poll() is None:
-            app_logger.info("BACKGROUND THREAD: Shutting down ComfyUI server...")
+            app_logger.info("Shutting down ComfyUI server...")
             current_server_manager.shutdown_server()
-        app_logger.info("BACKGROUND THREAD: Finished.")
+        
+        # Unsubscribe handlers to prevent issues if this function were somehow called again
+        event_publisher.unsubscribe(AppEventType.GUI_WINDOW_CONTENT_LOADED, _handle_gui_content_loaded)
+        event_publisher.publish(AppEventType.APP_LOGIC_SHUTDOWN_COMPLETE)
+        app_logger.info("Finished.")
 
 
 def main():
-    global launcher_logger, server_manager_instance, tray_manager_instance, gui_manager_instance
+    global launcher_logger, server_manager_instance, tray_manager_instance, gui_manager_instance, log_manager_instance
     global app_logic_thread_instance, app_shutdown_event
 
-    rotate_and_cleanup_logs(settings.LOG_DIR, settings.MAX_LOG_FILES, settings.MAX_LOG_AGE_DAYS)
-    launcher_logger = setup_launcher_logger(settings.LOG_DIR, settings.DEBUG)
+    # Ensure module-level events are clear at the start of main,
+    # in case of re-entry (e.g., during tests or if main could be called multiple times).
+    app_shutdown_event.clear()
+    _app_logic_completed_event.clear()
+    _tray_manager_completed_event.clear()
+
+    # Initialize LogManager first
+    log_manager_instance = LogManager(
+        log_dir=settings.LOG_DIR, debug_mode=settings.DEBUG,
+        max_files_to_keep_in_archive=settings.MAX_LOG_FILES, max_log_age_days=settings.MAX_LOG_AGE_DAYS
+    )
+    launcher_logger = log_manager_instance.get_launcher_logger() # Get the configured logger
     sys.excepthook = custom_excepthook
+
+    # Subscribe main thread handlers
+    event_publisher.subscribe(AppEventType.APPLICATION_QUIT_REQUESTED, _handle_main_thread_quit_request)
+    event_publisher.subscribe(AppEventType.APPLICATION_CRITICAL_ERROR, _handle_critical_error)
+    event_publisher.subscribe(AppEventType.SERVER_STOPPED_UNEXPECTEDLY, _handle_server_stopped_unexpectedly)
+    event_publisher.subscribe(AppEventType.APP_LOGIC_SHUTDOWN_COMPLETE, _handle_app_logic_shutdown_complete)
+    event_publisher.subscribe(AppEventType.TRAY_MANAGER_SHUTDOWN_COMPLETE, _handle_tray_manager_shutdown_complete)
 
     launcher_logger.info(f"Starting {settings.APP_NAME} (Version 1.0)")
     if settings.DEBUG:
@@ -185,61 +249,86 @@ def main():
             daemon=True # Daemon so it exits if main thread exits unexpectedly
         )
         app_logic_thread_instance.start()
-        launcher_logger.info(f"MAIN THREAD: {settings.APP_NAME} setup complete. GUI, Tray, and Background thread launched.")
+        launcher_logger.info(f"{settings.APP_NAME} setup complete. GUI, Tray, and Background thread launched.")
 
+        launcher_logger.info("Entering blocking call gui_manager_instance.start_webview_blocking()...")
         # This call is blocking. It will return when webview.destroy_window() is called
         # or if the window is closed and _on_closing doesn't prevent it (which it now does).
         gui_manager_instance.start_webview_blocking()
+        launcher_logger.info("Returned from gui_manager_instance.start_webview_blocking().")
 
         # If start_webview_blocking returns, it means the window was either closed by user
         # (and our _on_closing hid it), or webview.destroy_window() was called.
         # The application should now wait for the app_shutdown_event to be set (e.g., by the tray's Quit).
-        launcher_logger.info("MAIN THREAD: Webview blocking call has returned. Waiting for application shutdown signal.")
-        app_shutdown_event.wait() # Wait for tray "Quit" or other shutdown signal
-        launcher_logger.info("MAIN THREAD: Application shutdown signal received.")
+        launcher_logger.info("Webview blocking call has returned. Waiting for application shutdown signal.")
+        app_shutdown_event.wait() # Wait indefinitely; quit is now signaled by event handlers setting this
+        launcher_logger.info("Application shutdown signal received.")
 
     except Exception as e:
-        launcher_logger.critical(f"MAIN THREAD: An unhandled exception occurred: {e}", exc_info=True)
+        launcher_logger.critical(f"An unhandled exception occurred: {e}", exc_info=True)
         app_shutdown_event.set() # Ensure shutdown is signaled
     finally:
-        launcher_logger.info("MAIN THREAD: Initiating shutdown sequence...")
-        app_shutdown_event.set() # Ensure event is set for all components
+        launcher_logger.info("Initiating shutdown sequence (finally block)...")
+        # Ensure app_shutdown_event is set, though it should be by now if quit was graceful.
+        # If an exception occurred before APPLICATION_QUIT_REQUESTED was handled, this ensures it's set.
+        if not app_shutdown_event.is_set():
+            app_shutdown_event.set()
 
-        if app_logic_thread_instance and app_logic_thread_instance.is_alive():
-            launcher_logger.info("MAIN THREAD: Waiting for app logic thread to complete...")
-            app_logic_thread_instance.join(timeout=10)
-            if app_logic_thread_instance.is_alive():
-                launcher_logger.warning("MAIN THREAD: App logic thread did not exit cleanly after 10s.")
+        launcher_logger.info("Checking app logic thread...")
+        if not _app_logic_completed_event.wait(timeout=12): # Increased timeout slightly
+            launcher_logger.info("Waiting for app logic thread to complete...")
+            if app_logic_thread_instance and app_logic_thread_instance.is_alive(): # Check if thread object exists and is alive
+                launcher_logger.warning("App logic thread did not signal completion and is still alive.")
+            elif not app_logic_thread_instance:
+                 launcher_logger.warning("App logic thread instance is None, cannot confirm completion status.")
+        else:
+            launcher_logger.info("App logic thread signaled completion or timed out.")
 
         # Server shutdown is primarily handled by app_logic_thread_func.
         # Final check here.
+        launcher_logger.info("Checking server manager for final shutdown...")
         if server_manager_instance and getattr(server_manager_instance, 'server_process', None) and \
            server_manager_instance.server_process.poll() is None:
-            launcher_logger.info("MAIN THREAD: Performing final check/attempt to shut down ComfyUI server...")
+            launcher_logger.info("Performing final check/attempt to shut down ComfyUI server...")
             server_manager_instance.shutdown_server()
+        else:
+            launcher_logger.info("Server manager or server process not active for final shutdown.")
 
-        if tray_manager_instance:
-            launcher_logger.info("MAIN THREAD: Stopping tray manager...")
-            tray_manager_instance.stop()
-
+        # TrayManager's icon.stop() is handled by its own APPLICATION_QUIT_REQUESTED handler.
+        # We wait for the TRAY_MANAGER_SHUTDOWN_COMPLETE event which is published when its run() loop finishes.
+        launcher_logger.info("Checking TrayManager thread...")
+        if not _tray_manager_completed_event.wait(timeout=5):
+            launcher_logger.info("Waiting for TrayManager thread to complete...")
+            if tray_manager_instance and tray_manager_instance._thread and tray_manager_instance._thread.is_alive():
+                launcher_logger.warning("TrayManager thread did not signal completion and is still alive.")
+        else:
+            launcher_logger.info("TrayManager thread signaled completion or timed out.")
+        launcher_logger.info("Checking GUI manager for window destroy...")
         if gui_manager_instance and gui_manager_instance.webview_window:
-            launcher_logger.info("MAIN THREAD: Destroying GUI window...")
+            launcher_logger.info("Destroying GUI window (final step)...")
             # Call destroy() directly on the window instance
-            gui_manager_instance.webview_window.destroy()
+            # This might be redundant if TrayManager already destroyed it, but should be safe.
+            try:
+                gui_manager_instance.webview_window.destroy()
+                launcher_logger.info("MAIN THREAD: GUI window destroy command sent (final step).")
+            except Exception as e: # pywebview might raise if already destroyed or other issues
+                launcher_logger.warning(f"MAIN THREAD: Error destroying GUI window (final step, might be already destroyed): {e}")
+        else:
+            launcher_logger.info("GUI manager or webview window not active for destroy.")
 
-        launcher_logger.info(f"MAIN THREAD: {settings.APP_NAME} has exited cleanly.")
+        # Unsubscribe main thread handlers
+        event_publisher.unsubscribe(AppEventType.APPLICATION_QUIT_REQUESTED, _handle_main_thread_quit_request)
+        event_publisher.unsubscribe(AppEventType.APPLICATION_CRITICAL_ERROR, _handle_critical_error)
+        event_publisher.unsubscribe(AppEventType.SERVER_STOPPED_UNEXPECTEDLY, _handle_server_stopped_unexpectedly)
+        event_publisher.unsubscribe(AppEventType.APP_LOGIC_SHUTDOWN_COMPLETE, _handle_app_logic_shutdown_complete)
+        event_publisher.unsubscribe(AppEventType.TRAY_MANAGER_SHUTDOWN_COMPLETE, _handle_tray_manager_shutdown_complete)
+
+        launcher_logger.info(f"{settings.APP_NAME} has exited cleanly.")
         logging.shutdown() # Ensure all log handlers are flushed
 
 
 if __name__ == "__main__":
-    main_logger_pre = logging.getLogger("ComfyUILauncher_PreMain") # Renamed to avoid conflict
-    if not main_logger_pre.hasHandlers():
-        pre_main_handler = logging.StreamHandler(sys.stdout)
-        pre_main_formatter = logging.Formatter("[%(asctime)s] [PRE-MAIN] %(message)s", datefmt="%H:%M:%S")
-        pre_main_handler.setFormatter(pre_main_formatter)
-        main_logger_pre.addHandler(pre_main_handler)
-        main_logger_pre.setLevel(logging.INFO)
-
+    # The main launcher_logger is set up early in main() now, handling console output.
     try:
         main()
     except Exception as e:
