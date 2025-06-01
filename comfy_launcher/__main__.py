@@ -9,11 +9,13 @@ from .config import settings
 from .logger_setup import setup_launcher_logger, rotate_and_cleanup_logs
 from .gui_manager import GUIManager
 from .server_manager import ServerManager
+from .tray_manager import TrayManager # Import the new manager
 
 # Define logger and server_manager_instance at module level,
 # but they will be initialized/assigned within main() or by main().
 logger: logging.Logger = None # type: ignore
 server_manager_instance: Optional[ServerManager] = None # To hold the server_manager instance for shutdown
+tray_manager_instance: Optional[TrayManager] = None # To hold the tray_manager instance
 
 if TYPE_CHECKING:
     from .server_manager import ServerManager as ServerManagerType
@@ -111,6 +113,7 @@ def app_logic_thread_func(
 
 def main():
     global logger, server_manager_instance # Declare we're modifying the globals
+    global tray_manager_instance # Add tray_manager_instance to globals
 
     # --- Logger and Initial Setup moved inside main() ---
     rotate_and_cleanup_logs(settings.LOG_DIR, settings.MAX_LOG_FILES, settings.MAX_LOG_AGE_DAYS)
@@ -156,6 +159,13 @@ def main():
         server_manager=current_server_manager # Pass the instance
     )
 
+    current_tray_manager = TrayManager(
+        app_name=settings.APP_NAME,
+        assets_dir=settings.ASSETS_DIR, # TrayManager needs assets for its icon
+        logger=logger
+    )
+    tray_manager_instance = current_tray_manager
+
     # --- Main Thread Logic ---
     try:
         # This creates the window object, prepares HTML, and subscribes events
@@ -171,6 +181,10 @@ def main():
         except Exception as fallback_e:
             logger.error(f"MAIN THREAD: Fallback GUI error display also failed: {fallback_e}")
         return
+
+    # Start the tray icon manager
+    if tray_manager_instance:
+        tray_manager_instance.start()
 
     # Start the background thread to handle server startup and subsequent GUI updates
     app_logic_thread = threading.Thread(
@@ -194,6 +208,12 @@ def main():
         logger.info("MAIN THREAD: ComfyUI server shutdown sequence complete.")
     else:
         logger.warning("MAIN THREAD: ServerManager instance not found; skipping server shutdown.")
+
+    if tray_manager_instance:
+        tray_manager_instance.stop()
+        logger.info("MAIN THREAD: Tray icon manager shutdown.")
+    else:
+        logger.warning("MAIN THREAD: TrayManager instance not found; skipping tray shutdown.")
 
     if app_logic_thread.is_alive():
         logger.info("MAIN THREAD: Waiting for background application logic thread to complete...")
