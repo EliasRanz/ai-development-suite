@@ -1,0 +1,81 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST       # Standard for Python packages
+
+# Virtual environment
+## Common virtual environment directory names
+.*venv/       # Catches .venv, .wsl_venv, etc.
+[Ee][Nn][Vv]/ # Catches env/, ENV/ (case-insensitive for the first letter)
+venv/         # Catches venv/ (if not starting with a dot)
+env.bak/      # Specific backup patterns
+venv.bak/
+## Environment variable file (often at project root or in app directory)
+.env
+
+# IDE / Editor specific
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*.swo
+*~
+
+# OS specific
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Log files and directories
+*.log
+logs/
+comfy_launcher/logs/
+
+# Node.js specific logs (often appear in mixed projects or if tools generate them)
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Generated files
+# If you decide not to commit the generated loading HTML:
+comfy_launcher/loading_generated.html
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# MyPy
+.mypy_cache/
+
+# Ruff
+.ruff_cache/
+
+# Other
+*.bak
+*.tmp
+gemini-context.md
