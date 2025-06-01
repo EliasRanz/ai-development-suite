@@ -31,8 +31,19 @@ else:
 
 def custom_excepthook(exc_type, exc_value, exc_traceback):
     """Custom exception hook to log unhandled exceptions."""
-    from logging import Logger as LoggerType
-    from pathlib import Path as PathType
+    # The 'logger' variable here refers to the global 'logger' from __main__.py's scope.
+    # It's crucial that this hook is set *after* the main logger is configured.
+    if logger and logger.handlers: # Check if our main logger is configured
+        logger.critical(
+            "Unhandled exception caught by custom excepthook:",
+            exc_info=(exc_type, exc_value, exc_traceback)
+        )
+    else:
+        # Fallback if our main logger isn't set up (e.g., error before logger init)
+        # or if the hook was somehow called when logger was None.
+        # This will print to stderr if available, or be lost in a noconsole app.
+        sys.__excepthook__(exc_type, exc_value, exc_traceback) # Call the original hook
+
 
 def app_logic_thread_func(
     app_logger: 'LoggerType',
