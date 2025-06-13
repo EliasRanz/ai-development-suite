@@ -505,6 +505,119 @@ func (pm *ProjectManager) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// GetNotes retrieves notes, optionally filtered by task_id
+func (pm *ProjectManager) GetNotes(w http.ResponseWriter, r *http.Request) {
+	taskID := r.URL.Query().Get("task_id")
+
+	query := `
+		SELECT n.id, n.project_id, n.task_id, n.content, n.created_at
+		FROM notes n
+		WHERE 1=1
+	`
+	args := []interface{}{}
+
+	if taskID != "" {
+		query += " AND n.task_id = $1"
+		args = append(args, taskID)
+	}
+
+	query += " ORDER BY n.created_at DESC"
+
+	rows, err := pm.db.Query(query, args...)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var notes []Note
+	for rows.Next() {
+		var note Note
+		err := rows.Scan(&note.ID, &note.ProjectID, &note.TaskID, &note.Content, &note.CreatedAt)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		notes = append(notes, note)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(notes)
+}
+
+// CreateNote creates a new note
+func (pm *ProjectManager) CreateNote(w http.ResponseWriter, r *http.Request) {
+	var note Note
+	if err := json.NewDecoder(r.Body).Decode(&note); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if note.Content == "" {
+		http.Error(w, "Content is required", http.StatusBadRequest)
+		return
+	}
+
+	// If task_id is provided, get the project_id from the task
+	if note.TaskID != nil {
+		err := pm.db.QueryRow("SELECT project_id FROM tasks WHERE id = $1 AND deleted_at IS NULL", *note.TaskID).Scan(&note.ProjectID)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				http.Error(w, "Task not found", http.StatusNotFound)
+			} else {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+	} else if note.ProjectID == 0 {
+		http.Error(w, "Either task_id or project_id is required", http.StatusBadRequest)
+		return
+	}
+
+	err := pm.db.QueryRow(
+		"INSERT INTO notes (project_id, task_id, content) VALUES ($1, $2, $3) RETURNING id, created_at",
+		note.ProjectID, note.TaskID, note.Content,
+	).Scan(&note.ID, &note.CreatedAt)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(note)
+}
+
+// DeleteNote deletes a note
+func (pm *ProjectManager) DeleteNote(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	noteID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid note ID", http.StatusBadRequest)
+		return
+	}
+
+	result, err := pm.db.Exec("DELETE FROM notes WHERE id = $1", noteID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if rowsAffected == 0 {
+		http.Error(w, "Note not found", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (pm *ProjectManager) GetDashboard(w http.ResponseWriter, r *http.Request) {
 	var dashboard DashboardData
 	dashboard.TasksByStatus = make(map[string]int)
@@ -789,6 +902,9 @@ func main() {
 	api.HandleFunc("/tasks/{id:[0-9]+}", pm.DeleteTask).Methods("DELETE")
 	api.HandleFunc("/status-values", pm.GetStatusValues).Methods("GET")
 	api.HandleFunc("/priority-values", pm.GetPriorityValues).Methods("GET")
+	api.HandleFunc("/notes", pm.GetNotes).Methods("GET")
+	api.HandleFunc("/notes", pm.CreateNote).Methods("POST")
+	api.HandleFunc("/notes/{id:[0-9]+}", pm.DeleteNote).Methods("DELETE")
 
 	// CORS
 	c := cors.New(cors.Options{
