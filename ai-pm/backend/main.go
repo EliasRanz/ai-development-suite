@@ -39,6 +39,7 @@ type Task struct {
 	UpdatedAt      time.Time  `json:"updated_at"`
 	DeletedAt      *time.Time `json:"deleted_at,omitempty"`
 	DeletionReason *string    `json:"deletion_reason,omitempty"`
+	Notes          []Note     `json:"notes,omitempty"`
 }
 
 type Note struct {
@@ -234,6 +235,15 @@ func (pm *ProjectManager) GetTasks(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
+		// Fetch notes for this task
+		notes, err := pm.getNotesForTask(t.ID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		t.Notes = notes
+
 		tasks = append(tasks, t)
 	}
 
@@ -921,4 +931,37 @@ func main() {
 	log.Printf("📋 Dashboard: http://localhost:%s/api/dashboard", port)
 
 	log.Fatal(http.ListenAndServe(":"+port, handler))
+}
+
+// getNotesForTask fetches all notes for a specific task
+func (pm *ProjectManager) getNotesForTask(taskID int) ([]Note, error) {
+	query := `
+		SELECT id, project_id, task_id, content, created_at 
+		FROM notes 
+		WHERE task_id = $1 
+		ORDER BY created_at DESC
+	`
+
+	rows, err := pm.db.Query(query, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var notes []Note
+	for rows.Next() {
+		var note Note
+		err := rows.Scan(&note.ID, &note.ProjectID, &note.TaskID, &note.Content, &note.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		notes = append(notes, note)
+	}
+
+	// Return empty slice instead of nil if no notes found
+	if notes == nil {
+		notes = []Note{}
+	}
+
+	return notes, nil
 }
