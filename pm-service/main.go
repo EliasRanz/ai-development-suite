@@ -1,0 +1,808 @@
+package main
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/gorilla/mux"
+	_ "github.com/lib/pq"
+	"github.com/rs/cors"
+)
+
+type Project struct {
+	ID             int        `json:"id"`
+	Name           string     `json:"name"`
+	Description    string     `json:"description"`
+	Status         string     `json:"status"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	DeletedAt      *time.Time `json:"deleted_at,omitempty"`
+	DeletionReason *string    `json:"deletion_reason,omitempty"`
+}
+
+type Task struct {
+	ID             int        `json:"id"`
+	ProjectID      int        `json:"project_id"`
+	ProjectName    string     `json:"project_name,omitempty"`
+	Title          string     `json:"title"`
+	Description    string     `json:"description"`
+	Status         string     `json:"status"`
+	Priority       string     `json:"priority"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	DeletedAt      *time.Time `json:"deleted_at,omitempty"`
+	DeletionReason *string    `json:"deletion_reason,omitempty"`
+}
+
+type Note struct {
+	ID        int       `json:"id"`
+	ProjectID int       `json:"project_id"`
+	TaskID    *int      `json:"task_id"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type StatusValue struct {
+	ID          int       `json:"id"`
+	Key         string    `json:"key"`
+	Label       string    `json:"label"`
+	Description string    `json:"description"`
+	Color       string    `json:"color"`
+	SortOrder   int       `json:"sort_order"`
+	IsActive    bool      `json:"is_active"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type PriorityValue struct {
+	ID          int       `json:"id"`
+	Key         string    `json:"key"`
+	Label       string    `json:"label"`
+	Description string    `json:"description"`
+	Color       string    `json:"color"`
+	Icon        string    `json:"icon"`
+	Level       int       `json:"level"`
+	IsActive    bool      `json:"is_active"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type DashboardData struct {
+	TotalProjects int            `json:"total_projects"`
+	TasksByStatus map[string]int `json:"tasks_by_status"`
+	RecentTasks   []Task         `json:"recent_tasks"`
+}
+
+type ProjectManager struct {
+	db *sql.DB
+}
+
+func NewProjectManager() *ProjectManager {
+	dbHost := getEnv("AI_PM_DB_HOST", "localhost")
+	dbPort := getEnv("AI_PM_DB_PORT", "5432")
+	dbUser := getEnv("AI_PM_DB_USER", "aipm")
+	dbPassword := getEnv("AI_PM_DB_PASSWORD", "aipm123")
+	dbName := getEnv("AI_PM_DB_NAME", "ai_project_manager")
+
+	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		dbHost, dbPort, dbUser, dbPassword, dbName)
+
+	db, err := sql.Open("postgres", connStr)
+	if err != nil {
+		log.Fatal("Failed to connect to database:", err)
+	}
+
+	if err = db.Ping(); err != nil {
+		log.Fatal("Failed to ping database:", err)
+	}
+
+	log.Println("Connected to database successfully")
+	return &ProjectManager{db: db}
+}
+
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+func (pm *ProjectManager) GetProjects(w http.ResponseWriter, r *http.Request) {
+	rows, err := pm.db.Query("SELECT id, name, description, status, created_at, updated_at FROM projects WHERE deleted_at IS NULL ORDER BY created_at DESC")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var projects []Project
+	for rows.Next() {
+		var p Project
+		err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.Status, &p.CreatedAt, &p.UpdatedAt)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		projects = append(projects, p)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(projects)
+}
+
+func (pm *ProjectManager) CreateProject(w http.ResponseWriter, r *http.Request) {
+	var p Project
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if p.Name == "" {
+		http.Error(w, "Project name is required", http.StatusBadRequest)
+		return
+	}
+
+	err := pm.db.QueryRow(
+		"INSERT INTO projects (name, description) VALUES ($1, $2) RETURNING id, created_at, updated_at",
+		p.Name, p.Description,
+	).Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	p.Status = "active"
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(p)
+}
+
+func (pm *ProjectManager) GetProject(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	projectID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+
+	var p Project
+	err = pm.db.QueryRow("SELECT id, name, description, status, created_at, updated_at FROM projects WHERE id = $1 AND deleted_at IS NULL", projectID).
+		Scan(&p.ID, &p.Name, &p.Description, &p.Status, &p.CreatedAt, &p.UpdatedAt)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Project not found", http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(p)
+}
+
+func (pm *ProjectManager) GetTasks(w http.ResponseWriter, r *http.Request) {
+	projectID := r.URL.Query().Get("project_id")
+	status := r.URL.Query().Get("status")
+
+	query := `
+		SELECT t.id, t.project_id, t.title, t.description, t.status, t.priority, t.created_at, t.updated_at, p.name
+		FROM tasks t 
+		JOIN projects p ON t.project_id = p.id 
+		WHERE t.deleted_at IS NULL AND p.deleted_at IS NULL
+	`
+	args := []interface{}{}
+	conditions := []string{}
+
+	if projectID != "" {
+		conditions = append(conditions, fmt.Sprintf("t.project_id = $%d", len(args)+1))
+		args = append(args, projectID)
+	}
+
+	if status != "" {
+		conditions = append(conditions, fmt.Sprintf("t.status = $%d", len(args)+1))
+		args = append(args, status)
+	}
+
+	if len(conditions) > 0 {
+		for _, condition := range conditions {
+			query += " AND " + condition
+		}
+	}
+
+	query += " ORDER BY t.created_at DESC"
+
+	rows, err := pm.db.Query(query, args...)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var tasks []Task
+	for rows.Next() {
+		var t Task
+		err := rows.Scan(&t.ID, &t.ProjectID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.CreatedAt, &t.UpdatedAt, &t.ProjectName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		tasks = append(tasks, t)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(tasks)
+}
+
+func (pm *ProjectManager) CreateTask(w http.ResponseWriter, r *http.Request) {
+	var t Task
+	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if t.ProjectID == 0 || t.Title == "" {
+		http.Error(w, "Project ID and title are required", http.StatusBadRequest)
+		return
+	}
+
+	if t.Priority == "" {
+		t.Priority = "medium"
+	}
+
+	err := pm.db.QueryRow(
+		"INSERT INTO tasks (project_id, title, description, priority) VALUES ($1, $2, $3, $4) RETURNING id, status, created_at, updated_at",
+		t.ProjectID, t.Title, t.Description, t.Priority,
+	).Scan(&t.ID, &t.Status, &t.CreatedAt, &t.UpdatedAt)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(t)
+}
+
+func (pm *ProjectManager) GetTask(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid task ID", http.StatusBadRequest)
+		return
+	}
+
+	var t Task
+	err = pm.db.QueryRow(`
+		SELECT t.id, t.project_id, t.title, t.description, t.status, t.priority, t.created_at, t.updated_at, p.name
+		FROM tasks t 
+		JOIN projects p ON t.project_id = p.id 
+		WHERE t.id = $1 AND t.deleted_at IS NULL AND p.deleted_at IS NULL`, taskID).
+		Scan(&t.ID, &t.ProjectID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.CreatedAt, &t.UpdatedAt, &t.ProjectName)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Task not found", http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(t)
+}
+
+func (pm *ProjectManager) UpdateTask(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid task ID", http.StatusBadRequest)
+		return
+	}
+
+	var updates map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Build dynamic update query
+	setParts := []string{}
+	args := []interface{}{}
+	argCount := 1
+
+	for field, value := range updates {
+		switch field {
+		case "title", "description", "status", "priority":
+			setParts = append(setParts, fmt.Sprintf("%s = $%d", field, argCount))
+			args = append(args, value)
+			argCount++
+		}
+	}
+
+	if len(setParts) == 0 {
+		http.Error(w, "No valid fields to update", http.StatusBadRequest)
+		return
+	}
+
+	setParts = append(setParts, "updated_at = CURRENT_TIMESTAMP")
+	args = append(args, taskID)
+
+	query := fmt.Sprintf("UPDATE tasks SET %s WHERE id = $%d RETURNING id, project_id, title, description, status, priority, created_at, updated_at",
+		strings.Join(setParts, ", "), argCount)
+
+	var t Task
+	err = pm.db.QueryRow(query, args...).Scan(&t.ID, &t.ProjectID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.CreatedAt, &t.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Task not found", http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(t)
+}
+
+func (pm *ProjectManager) UpdateProject(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	projectID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+
+	var updates map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Build dynamic update query
+	setParts := []string{}
+	args := []interface{}{}
+	argCount := 1
+
+	for field, value := range updates {
+		switch field {
+		case "name", "description", "status":
+			setParts = append(setParts, fmt.Sprintf("%s = $%d", field, argCount))
+			args = append(args, value)
+			argCount++
+		}
+	}
+
+	if len(setParts) == 0 {
+		http.Error(w, "No valid fields to update", http.StatusBadRequest)
+		return
+	}
+
+	setParts = append(setParts, "updated_at = CURRENT_TIMESTAMP")
+	query := fmt.Sprintf("UPDATE projects SET %s WHERE id = $%d AND deleted_at IS NULL RETURNING id, name, description, status, created_at, updated_at",
+		strings.Join(setParts, ", "), argCount)
+	args = append(args, projectID)
+
+	var p Project
+	err = pm.db.QueryRow(query, args...).Scan(&p.ID, &p.Name, &p.Description, &p.Status, &p.CreatedAt, &p.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Project not found", http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(p)
+}
+
+// DeleteProject soft deletes a project
+func (pm *ProjectManager) DeleteProject(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	projectID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+
+	var deleteRequest struct {
+		Reason string `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&deleteRequest); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if deleteRequest.Reason == "" {
+		http.Error(w, "Deletion reason is required", http.StatusBadRequest)
+		return
+	}
+
+	// Soft delete the project and all its tasks
+	tx, err := pm.db.Begin()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	// Update project
+	_, err = tx.Exec("UPDATE projects SET deleted_at = CURRENT_TIMESTAMP, deletion_reason = $1 WHERE id = $2 AND deleted_at IS NULL",
+		deleteRequest.Reason, projectID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Update all tasks in the project
+	_, err = tx.Exec("UPDATE tasks SET deleted_at = CURRENT_TIMESTAMP, deletion_reason = $1 WHERE project_id = $2 AND deleted_at IS NULL",
+		"Project deleted: "+deleteRequest.Reason, projectID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err = tx.Commit(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// DeleteTask soft deletes a task
+func (pm *ProjectManager) DeleteTask(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid task ID", http.StatusBadRequest)
+		return
+	}
+
+	var deleteRequest struct {
+		Reason string `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&deleteRequest); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if deleteRequest.Reason == "" {
+		http.Error(w, "Deletion reason is required", http.StatusBadRequest)
+		return
+	}
+
+	result, err := pm.db.Exec("UPDATE tasks SET deleted_at = CURRENT_TIMESTAMP, deletion_reason = $1 WHERE id = $2 AND deleted_at IS NULL",
+		deleteRequest.Reason, taskID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if rowsAffected == 0 {
+		http.Error(w, "Task not found", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (pm *ProjectManager) GetDashboard(w http.ResponseWriter, r *http.Request) {
+	var dashboard DashboardData
+	dashboard.TasksByStatus = make(map[string]int)
+
+	// Get total projects
+	err := pm.db.QueryRow("SELECT COUNT(*) FROM projects WHERE deleted_at IS NULL").Scan(&dashboard.TotalProjects)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Get tasks by status
+	rows, err := pm.db.Query("SELECT status, COUNT(*) FROM tasks WHERE deleted_at IS NULL GROUP BY status")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var status string
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		dashboard.TasksByStatus[status] = count
+	}
+
+	// Get recent tasks
+	taskRows, err := pm.db.Query(`
+		SELECT t.id, t.project_id, t.title, t.description, t.status, t.priority, t.created_at, t.updated_at, p.name
+		FROM tasks t 
+		JOIN projects p ON t.project_id = p.id 
+		WHERE t.deleted_at IS NULL AND p.deleted_at IS NULL
+		ORDER BY t.updated_at DESC 
+		LIMIT 10
+	`)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer taskRows.Close()
+
+	for taskRows.Next() {
+		var t Task
+		err := taskRows.Scan(&t.ID, &t.ProjectID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.CreatedAt, &t.UpdatedAt, &t.ProjectName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		dashboard.RecentTasks = append(dashboard.RecentTasks, t)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(dashboard)
+}
+
+func (pm *ProjectManager) HealthCheck(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":    "healthy",
+		"timestamp": time.Now(),
+		"service":   "ai-project-manager",
+	})
+}
+
+// Database initialization
+func (pm *ProjectManager) initDatabase() {
+	// Create projects table
+	projectsTable := `
+	CREATE TABLE IF NOT EXISTS projects (
+		id SERIAL PRIMARY KEY,
+		name VARCHAR(255) NOT NULL,
+		description TEXT,
+		status VARCHAR(50) NOT NULL DEFAULT 'active',
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		deleted_at TIMESTAMP NULL,
+		deletion_reason TEXT NULL
+	)`
+
+	// Create tasks table
+	tasksTable := `
+	CREATE TABLE IF NOT EXISTS tasks (
+		id SERIAL PRIMARY KEY,
+		project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+		title VARCHAR(255) NOT NULL,
+		description TEXT,
+		status VARCHAR(50) NOT NULL DEFAULT 'todo',
+		priority VARCHAR(50) NOT NULL DEFAULT 'medium',
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		deleted_at TIMESTAMP NULL,
+		deletion_reason TEXT NULL
+	)`
+
+	// Create notes table
+	notesTable := `
+	CREATE TABLE IF NOT EXISTS notes (
+		id SERIAL PRIMARY KEY,
+		project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+		task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+		content TEXT NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`
+
+	// Create status_values table
+	statusTable := `
+	CREATE TABLE IF NOT EXISTS status_values (
+		id SERIAL PRIMARY KEY,
+		key VARCHAR(50) UNIQUE NOT NULL,
+		label VARCHAR(100) NOT NULL,
+		description TEXT,
+		color VARCHAR(7) NOT NULL,
+		sort_order INTEGER NOT NULL DEFAULT 0,
+		is_active BOOLEAN NOT NULL DEFAULT true,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`
+
+	// Create priority_values table
+	priorityTable := `
+	CREATE TABLE IF NOT EXISTS priority_values (
+		id SERIAL PRIMARY KEY,
+		key VARCHAR(50) UNIQUE NOT NULL,
+		label VARCHAR(100) NOT NULL,
+		description TEXT,
+		color VARCHAR(7) NOT NULL,
+		icon VARCHAR(10),
+		level INTEGER NOT NULL DEFAULT 1,
+		is_active BOOLEAN NOT NULL DEFAULT true,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`
+
+	// Execute table creation
+	if _, err := pm.db.Exec(projectsTable); err != nil {
+		log.Fatal("Failed to create projects table:", err)
+	}
+
+	if _, err := pm.db.Exec(tasksTable); err != nil {
+		log.Fatal("Failed to create tasks table:", err)
+	}
+
+	if _, err := pm.db.Exec(notesTable); err != nil {
+		log.Fatal("Failed to create notes table:", err)
+	}
+
+	if _, err := pm.db.Exec(statusTable); err != nil {
+		log.Fatal("Failed to create status_values table:", err)
+	}
+
+	if _, err := pm.db.Exec(priorityTable); err != nil {
+		log.Fatal("Failed to create priority_values table:", err)
+	}
+
+	// Seed default status values
+	pm.seedStatusValues()
+	pm.seedPriorityValues()
+
+	log.Println("Database initialized successfully")
+}
+
+func (pm *ProjectManager) seedStatusValues() {
+	statusValues := []StatusValue{
+		{Key: "todo", Label: "To Do", Description: "Tasks that need to be started", Color: "#6B7280", SortOrder: 1, IsActive: true},
+		{Key: "in_progress", Label: "In Progress", Description: "Tasks currently being worked on", Color: "#3B82F6", SortOrder: 2, IsActive: true},
+		{Key: "review", Label: "Review", Description: "Tasks waiting for review or approval", Color: "#F59E0B", SortOrder: 3, IsActive: true},
+		{Key: "done", Label: "Done", Description: "Completed tasks", Color: "#10B981", SortOrder: 4, IsActive: true},
+	}
+
+	for _, status := range statusValues {
+		_, err := pm.db.Exec(`
+			INSERT INTO status_values (key, label, description, color, sort_order, is_active)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (key) DO NOTHING`,
+			status.Key, status.Label, status.Description, status.Color, status.SortOrder, status.IsActive)
+		if err != nil {
+			log.Printf("Warning: Failed to seed status value %s: %v", status.Key, err)
+		}
+	}
+}
+
+func (pm *ProjectManager) seedPriorityValues() {
+	priorityValues := []PriorityValue{
+		{Key: "low", Label: "Low", Description: "Low priority items", Color: "#10B981", Icon: "🟢", Level: 1, IsActive: true},
+		{Key: "medium", Label: "Medium", Description: "Medium priority items", Color: "#F59E0B", Icon: "🟡", Level: 2, IsActive: true},
+		{Key: "high", Label: "High", Description: "High priority items", Color: "#F97316", Icon: "🟠", Level: 3, IsActive: true},
+		{Key: "urgent", Label: "Urgent", Description: "Urgent items requiring immediate attention", Color: "#EF4444", Icon: "🔴", Level: 4, IsActive: true},
+	}
+
+	for _, priority := range priorityValues {
+		_, err := pm.db.Exec(`
+			INSERT INTO priority_values (key, label, description, color, icon, level, is_active)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			ON CONFLICT (key) DO NOTHING`,
+			priority.Key, priority.Label, priority.Description, priority.Color, priority.Icon, priority.Level, priority.IsActive)
+		if err != nil {
+			log.Printf("Warning: Failed to seed priority value %s: %v", priority.Key, err)
+		}
+	}
+}
+
+// API endpoints for status and priority values
+func (pm *ProjectManager) GetStatusValues(w http.ResponseWriter, r *http.Request) {
+	rows, err := pm.db.Query(`
+		SELECT id, key, label, description, color, sort_order, is_active, created_at
+		FROM status_values 
+		WHERE is_active = true 
+		ORDER BY sort_order`)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var statusValues []StatusValue
+	for rows.Next() {
+		var s StatusValue
+		err := rows.Scan(&s.ID, &s.Key, &s.Label, &s.Description, &s.Color, &s.SortOrder, &s.IsActive, &s.CreatedAt)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		statusValues = append(statusValues, s)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(statusValues)
+}
+
+func (pm *ProjectManager) GetPriorityValues(w http.ResponseWriter, r *http.Request) {
+	rows, err := pm.db.Query(`
+		SELECT id, key, label, description, color, icon, level, is_active, created_at
+		FROM priority_values 
+		WHERE is_active = true 
+		ORDER BY level`)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var priorityValues []PriorityValue
+	for rows.Next() {
+		var p PriorityValue
+		err := rows.Scan(&p.ID, &p.Key, &p.Label, &p.Description, &p.Color, &p.Icon, &p.Level, &p.IsActive, &p.CreatedAt)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		priorityValues = append(priorityValues, p)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(priorityValues)
+}
+
+func main() {
+	pm := NewProjectManager()
+	defer pm.db.Close()
+
+	// Initialize database tables and seed data
+	pm.initDatabase()
+
+	r := mux.NewRouter()
+
+	// API routes
+	api := r.PathPrefix("/api").Subrouter()
+	api.HandleFunc("/health", pm.HealthCheck).Methods("GET")
+	api.HandleFunc("/dashboard", pm.GetDashboard).Methods("GET")
+	api.HandleFunc("/projects", pm.GetProjects).Methods("GET")
+	api.HandleFunc("/projects", pm.CreateProject).Methods("POST")
+	api.HandleFunc("/projects/{id:[0-9]+}", pm.GetProject).Methods("GET")
+	api.HandleFunc("/projects/{id:[0-9]+}", pm.UpdateProject).Methods("PUT")
+	api.HandleFunc("/projects/{id:[0-9]+}", pm.DeleteProject).Methods("DELETE")
+	api.HandleFunc("/tasks", pm.GetTasks).Methods("GET")
+	api.HandleFunc("/tasks", pm.CreateTask).Methods("POST")
+	api.HandleFunc("/tasks/{id:[0-9]+}", pm.GetTask).Methods("GET")
+	api.HandleFunc("/tasks/{id:[0-9]+}", pm.UpdateTask).Methods("PUT")
+	api.HandleFunc("/tasks/{id:[0-9]+}", pm.DeleteTask).Methods("DELETE")
+	api.HandleFunc("/status-values", pm.GetStatusValues).Methods("GET")
+	api.HandleFunc("/priority-values", pm.GetPriorityValues).Methods("GET")
+
+	// CORS
+	c := cors.New(cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE"},
+		AllowedHeaders: []string{"*"},
+	})
+
+	handler := c.Handler(r)
+
+	port := getEnv("PORT", "8000")
+	log.Printf("🚀 AI Project Manager API starting on port %s", port)
+	log.Printf("📊 Health check: http://localhost:%s/api/health", port)
+	log.Printf("📋 Dashboard: http://localhost:%s/api/dashboard", port)
+
+	log.Fatal(http.ListenAndServe(":"+port, handler))
+}
