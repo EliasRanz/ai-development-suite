@@ -205,17 +205,21 @@ EOF
 }
 
 cmd_update_task() {
-    local task_id="" status=""
+    local task_id="" status="" title="" description=""
     
-    while getopts ":i:s:h" opt; do
+    while getopts ":i:s:t:d:h" opt; do
         case $opt in
             i) task_id="$OPTARG" ;;
             s) status="$OPTARG" ;;
+            t) title="$OPTARG" ;;
+            d) description="$OPTARG" ;;
             h) cat <<EOF
-Usage: $0 update-task -i TASK_ID -s STATUS [-h]
-  -i TASK_ID  Task ID (required)
-  -s STATUS   New status (todo|in_progress|review|done)
-  -h          Show help
+Usage: $0 update-task -i TASK_ID [-s STATUS] [-t TITLE] [-d DESCRIPTION] [-h]
+  -i TASK_ID      Task ID (required)
+  -s STATUS       New status (todo|in_progress|review|done)
+  -t TITLE        New title
+  -d DESCRIPTION  New description
+  -h              Show help
 EOF
                return ;;
             \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
@@ -223,16 +227,37 @@ EOF
         esac
     done
     
-    if [[ -z "$task_id" || -z "$status" ]]; then
-        print_error "Task ID and status are required"
+    if [[ -z "$task_id" ]]; then
+        print_error "Task ID is required"
         return 1
     fi
     
-    local data=$(jq -n --arg status "$status" '{status: $status}')
+    if [[ -z "$status" && -z "$title" && -z "$description" ]]; then
+        print_error "At least one field to update is required (status, title, or description)"
+        return 1
+    fi
+    
+    # Build JSON data with only the fields that were provided
+    local data="{}"
+    if [[ -n "$status" ]]; then
+        data=$(echo "$data" | jq --arg status "$status" '. + {status: $status}')
+    fi
+    if [[ -n "$title" ]]; then
+        data=$(echo "$data" | jq --arg title "$title" '. + {title: $title}')
+    fi
+    if [[ -n "$description" ]]; then
+        data=$(echo "$data" | jq --arg description "$description" '. + {description: $description}')
+    fi
+    
     local response=$(api_call PUT "/tasks/$task_id" "$data")
     
     if echo "$response" | jq -e '.id' >/dev/null; then
-        print_success "Task $task_id updated to '$status'"
+        local updated_fields=""
+        [[ -n "$status" ]] && updated_fields="${updated_fields}status to '$status', "
+        [[ -n "$title" ]] && updated_fields="${updated_fields}title to '$title', "
+        [[ -n "$description" ]] && updated_fields="${updated_fields}description, "
+        updated_fields=${updated_fields%, }  # Remove trailing comma and space
+        print_success "Task $task_id updated: $updated_fields"
     else
         print_error "Failed to update task: $response"
         return 1
@@ -536,6 +561,7 @@ Examples:
   $0 list-tasks -v
   $0 add-task -p 1 -t "Fix bug" -r high
   $0 update-task -i 42 -s done
+  $0 update-task -i 42 -t "New title" -d "New description"
   $0 delete-task -i 42
   $0 list-projects
   $0 add-project -n "New Project" -d "Project description"
