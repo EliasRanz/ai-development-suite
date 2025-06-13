@@ -14,14 +14,25 @@ Please document any significant AI assistance in your PR descriptions.
 
 ## 🚀 Getting Started
 
+### Prerequisites
+- **Git** installed and configured
+- **GitHub CLI** installed and authenticated (`gh auth login`)
+- **Node.js** and **npm** (for frontend components)
+- **Go** (for backend components)
+
+### Setup Steps
 1. **Fork the repository**
 2. **Clone your fork:**
    ```bash
    git clone https://github.com/your-username/ai-development-suite.git
    cd ai-development-suite
    ```
-3. **Set up your development environment** (see individual tool READMEs)
-4. **Create a feature branch:**
+3. **Configure GitHub CLI:**
+   ```bash
+   gh config set pager cat  # Prevents pager issues
+   ```
+4. **Set up your development environment** (see individual tool READMEs)
+5. **Create a feature branch:**
    ```bash
    git checkout -b feature/your-feature-name
    ```
@@ -54,6 +65,20 @@ Since your PR title becomes the commit message, make it:
   - ✅ `Update dependency management documentation`
   - ❌ `changes`
   - ❌ `fix stuff`
+
+### 3. Merging with GitHub CLI
+**Maintainers will use GitHub CLI for consistent merging:**
+```bash
+# Review PR first
+gh pr view <PR_NUMBER>
+
+# Merge with squash (our standard)
+gh pr merge <PR_NUMBER> --squash --delete-branch
+```
+
+**Contributors can also help by:**
+- Using GitHub CLI to check PR status
+- Ensuring their PRs are ready for squash merging
 
 ## 🏗️ Project Structure
 
@@ -136,11 +161,50 @@ For new features:
 - **Propose a solution** if you have one
 - **Consider backwards compatibility**
 
-## 📞 Getting Help
+## �️ GitHub CLI Setup
+
+This project uses GitHub CLI for efficient PR management. **Required setup:**
+
+### Install GitHub CLI
+```bash
+# Install if not already available
+# See: https://cli.github.com/
+gh --version
+```
+
+### Configure to Avoid Pager Issues
+```bash
+# Prevent GitHub CLI from opening output in 'less' pager
+gh config set pager cat
+```
+
+### Common GitHub CLI Commands
+```bash
+# List open PRs
+gh pr list
+
+# View PR details
+gh pr view <PR_NUMBER>
+
+# Merge PR with squash (aligns with our merge strategy)
+gh pr merge <PR_NUMBER> --squash --delete-branch
+
+# Check repository status
+gh repo view
+```
+
+### Dependabot PR Management
+When Dependabot creates security update PRs:
+1. **Review the PR**: `gh pr view <PR_NUMBER>`
+2. **Check if it's a security update** (these are usually safe to merge)
+3. **Merge using squash**: `gh pr merge <PR_NUMBER> --squash --delete-branch`
+
+## �📞 Getting Help
 
 - **Check the documentation** first
 - **Search existing issues** for similar problems
 - **Create an issue** with detailed information
+- **Use GitHub CLI** for PR management: `gh pr list`
 - **Be patient and respectful** in all interactions
 
 ## 🎯 AI Development Philosophy

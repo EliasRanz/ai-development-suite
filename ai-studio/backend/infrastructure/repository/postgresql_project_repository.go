@@ -3,7 +3,6 @@ package infrastructure
 import (
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/ai-studio/backend/domain"
 	_ "github.com/lib/pq"

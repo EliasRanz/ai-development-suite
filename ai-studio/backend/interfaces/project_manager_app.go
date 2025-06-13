@@ -174,9 +174,9 @@ func (p *ProjectManagerApp) GetDashboardData() (*DashboardData, error) {
 
 // DashboardData represents data for the main dashboard
 type DashboardData struct {
-	Projects     []*domain.Project      `json:"projects"`
-	RecentTasks  []*domain.Task         `json:"recent_tasks"`
-	OverallStats *domain.OverallStats   `json:"overall_stats"`
+	Projects     []*domain.Project    `json:"projects"`
+	RecentTasks  []*domain.Task       `json:"recent_tasks"`
+	OverallStats *domain.OverallStats `json:"overall_stats"`
 }
 
 // Helper function to get recent tasks (could be moved to service layer)

@@ -14,11 +14,11 @@ type App struct {
 	ctx context.Context
 
 	// Use cases
-	launchTool       *usecases.LaunchToolUseCase
-	stopTool         *usecases.StopToolUseCase
-	createConfig     *usecases.CreateConfigurationUseCase
-	listInstances    *usecases.ListInstancesUseCase
-	getSystemInfo    *usecases.GetSystemInfoUseCase
+	launchTool    *usecases.LaunchToolUseCase
+	stopTool      *usecases.StopToolUseCase
+	createConfig  *usecases.CreateConfigurationUseCase
+	listInstances *usecases.ListInstancesUseCase
+	getSystemInfo *usecases.GetSystemInfoUseCase
 }
 
 // NewApp creates a new Wails application with dependency injection
@@ -87,38 +87,38 @@ func (a *App) GetToolDefaultConfig(toolType string) map[string]interface{} {
 	switch entities.ToolType(toolType) {
 	case entities.ComfyUI:
 		return map[string]interface{}{
-			"port":    8188,
-			"host":    "127.0.0.1",
+			"port":      8188,
+			"host":      "127.0.0.1",
 			"arguments": []string{"--listen", "127.0.0.1", "--port", "8188"},
 		}
 	case entities.Automatic1111:
 		return map[string]interface{}{
-			"port":    7860,
-			"host":    "127.0.0.1",
+			"port":      7860,
+			"host":      "127.0.0.1",
 			"arguments": []string{"--listen", "--port", "7860"},
 		}
 	case entities.Ollama:
 		return map[string]interface{}{
-			"port":    11434,
-			"host":    "127.0.0.1",
+			"port":      11434,
+			"host":      "127.0.0.1",
 			"arguments": []string{"serve"},
 		}
 	case entities.LMStudio:
 		return map[string]interface{}{
-			"port":    1234,
-			"host":    "127.0.0.1",
+			"port":      1234,
+			"host":      "127.0.0.1",
 			"arguments": []string{},
 		}
 	case entities.TextGenWebUI:
 		return map[string]interface{}{
-			"port":    7860,
-			"host":    "127.0.0.1",
+			"port":      7860,
+			"host":      "127.0.0.1",
 			"arguments": []string{"--listen", "--listen-port", "7860"},
 		}
 	default:
 		return map[string]interface{}{
-			"port":    8080,
-			"host":    "127.0.0.1",
+			"port":      8080,
+			"host":      "127.0.0.1",
 			"arguments": []string{},
 		}
 	}
