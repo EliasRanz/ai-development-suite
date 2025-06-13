@@ -58,10 +58,11 @@ cmd_list_tasks() {
             h) cat <<EOF
 Usage: $0 list-tasks [-p PROJECT_ID] [-v] [-h]
   -p PROJECT_ID  Filter by project ID
-  -v             Verbose output (single line per task)
+  -v             Verbose output (detailed summary format with descriptions)
   -h             Show help
 
-Output includes: ID, Project Name, Title, Status, Priority
+Regular output: Clean table format with ID, Project, Title, Status, Priority
+Verbose output: Detailed summary format with full descriptions and timestamps
 EOF
                return ;;
             \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
@@ -78,10 +79,22 @@ EOF
     fi
     
     if [[ "$verbose" == true ]]; then
-        echo "$response" | jq -r '.[] | "ID: \(.id) | Project: \(.project_name // "Unknown") | \(.title) | \(.status) | \(.priority)"'
+        # Verbose: use summary format instead of table
+        echo
+        echo -e "${BLUE}Task Summary:${NC}"
+        echo "$response" | jq -r '.[] | 
+            "
+\u001b[0;33m► Task #\(.id): \(.title)\u001b[0m
+  Project: \(.project_name // "Unknown")
+  Status: \(.status) | Priority: \(.priority)
+  Description: \(.description // "No description provided")
+  Created: \(.created_at | split("T")[0]) | Updated: \(.updated_at | split("T")[0])
+  "'
     else
+        # Regular: clean tabular format
         printf "%-4s %-30s %-35s %-12s %-8s\n" "ID" "PROJECT" "TITLE" "STATUS" "PRIORITY"
         printf "%-4s %-30s %-35s %-12s %-8s\n" "──" "──────────────────────────────" "───────────────────────────────────" "────────────" "────────"
+        
         echo "$response" | jq -r '.[] | "\(.id)\t\(.project_name // "Unknown")\t\(.title)\t\(.status)\t\(.priority)"' |
         while IFS=$'\t' read -r id project title status priority; do
             printf "%-4s %-30s %-35s %-12s %-8s\n" "$id" "${project:0:29}" "${title:0:34}" "$status" "$priority"
