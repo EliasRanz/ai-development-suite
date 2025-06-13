@@ -1,5 +1,6 @@
 # Data directories - exclude from git
 data/
+backups/
 
 # Node modules
 node_modules/
