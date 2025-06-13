@@ -27,6 +27,7 @@ api_call() {
         GET) curl -s "$API_BASE_URL$endpoint" ;;
         POST|PUT) curl -s -X "$method" "$API_BASE_URL$endpoint" \
                     -H "Content-Type: application/json" -d "$data" ;;
+        DELETE) curl -s -X DELETE "$API_BASE_URL$endpoint" ;;
     esac
 }
 
@@ -77,7 +78,12 @@ EOF
     if [[ "$verbose" == true ]]; then
         echo "$response" | jq -r '.[] | "ID: \(.id) | \(.title) | \(.status) | \(.priority)"'
     else
-        echo "$response" | jq -r '.[] | "\(.id)\t\(.title)\t\(.status)"' | column -t
+        printf "%-4s %-50s %-12s\n" "ID" "TITLE" "STATUS"
+        printf "%-4s %-50s %-12s\n" "──" "──────────────────────────────────────────────────" "────────────"
+        echo "$response" | jq -r '.[] | "\(.id)\t\(.title)\t\(.status)"' |
+        while IFS=$'\t' read -r id title status; do
+            printf "%-4s %-50s %-12s\n" "$id" "${title:0:49}" "$status"
+        done
     fi
 }
 
@@ -160,6 +166,48 @@ EOF
     fi
 }
 
+cmd_delete_task() {
+    local task_id=""
+    
+    while getopts ":i:h" opt; do
+        case $opt in
+            i) task_id="$OPTARG" ;;
+            h) cat <<EOF
+Usage: $0 delete-task -i TASK_ID [-h]
+  -i TASK_ID  Task ID to delete (required)
+  -h          Show help
+EOF
+               return ;;
+            \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
+            :) print_error "Option -$OPTARG requires an argument"; return 1 ;;
+        esac
+    done
+    
+    if [[ -z "$task_id" ]]; then
+        print_error "Task ID is required"
+        return 1
+    fi
+    
+    # Get task details first for confirmation
+    local task_info=$(api_call GET "/tasks/$task_id")
+    if ! echo "$task_info" | jq -e '.id' >/dev/null; then
+        print_error "Task $task_id not found"
+        return 1
+    fi
+    
+    local title=$(echo "$task_info" | jq -r '.title // "Unknown"')
+    print_warning "Deleting task $task_id: $title"
+    
+    local response=$(api_call DELETE "/tasks/$task_id")
+    
+    if [[ "$response" == "" ]] || echo "$response" | jq -e '.message' >/dev/null 2>&1; then
+        print_success "Task $task_id deleted successfully"
+    else
+        print_error "Failed to delete task: $response"
+        return 1
+    fi
+}
+
 # Legacy support functions (for backward compatibility)
 add_task() {
     print_warning "Legacy usage detected. Consider using: $0 add-task -p $1 -t \"$2\""
@@ -195,6 +243,7 @@ Commands:
   list-tasks     List tasks
   add-task       Add a new task  
   update-task    Update task status
+  delete-task    Delete a task
   setup          Check API health
   help           Show this help
 
@@ -204,6 +253,7 @@ Examples:
   $0 list-tasks -v
   $0 add-task -p 1 -t "Fix bug" -r high
   $0 update-task -i 42 -s done
+  $0 delete-task -i 42
 
 Legacy format still supported:
   $0 add-task PROJECT_ID "Title" "Description" priority
@@ -222,6 +272,7 @@ EOF
         list-tasks) check_deps; cmd_list_tasks "$@" ;;
         add-task) check_deps; cmd_add_task "$@" ;;
         update-task) check_deps; cmd_update_task "$@" ;;
+        delete-task) check_deps; cmd_delete_task "$@" ;;
         setup) setup ;;
         help) main ;;
         # Legacy support
