@@ -8,7 +8,7 @@ A collection of AI development tools designed to streamline workflows and enhanc
 
 A comprehensive suite of AI development tools designed to streamline workflows and enhance productivity.
 
-> **🤖 AI-Assisted Development**: This project is actively developed with AI assistance (GitHub Copilot, Claude, and other AI tools). The commit history, code architecture, and documentation reflect collaborative human-AI development practices.
+> **🤖 AI-Assisted Development**: This project is actively developed with AI assistance. The commit history, code architecture, and documentation reflect collaborative human-AI development practices.
 
 ## 🛠️ Tools Included
 
