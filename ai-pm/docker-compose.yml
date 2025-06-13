@@ -4,7 +4,7 @@ services:
     platform: linux/amd64
     restart: unless-stopped
     volumes:
-      - ai_pm_cache_vol:/data
+      - ./data/redis:/data
     container_name: ai-tools-pm-cache
 
   ai-pm-database:
@@ -16,7 +16,7 @@ services:
       POSTGRES_PASSWORD: ${AI_PM_DB_PASSWORD:-aipm123}
       POSTGRES_DB: ${AI_PM_DB_NAME:-ai_project_manager}
     volumes:
-      - ai_pm_db_vol:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
     container_name: ai-tools-pm-database
     ports:
       - "5432:5432"
@@ -30,7 +30,7 @@ services:
       MINIO_ROOT_USER: ${AI_PM_STORAGE_USER:-aipm}
       MINIO_ROOT_PASSWORD: ${AI_PM_STORAGE_PASSWORD:-aipm123}
     volumes:
-      - ai_pm_storage_vol:/export
+      - ./data/minio:/export
     container_name: ai-tools-pm-storage
     ports:
       - "9000:9000"
@@ -38,7 +38,7 @@ services:
 
   ai-pm-api:
     build:
-      context: ./pm-service
+      context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
@@ -58,7 +58,7 @@ services:
 
   ai-pm-ui:
     build:
-      context: ./pm-ui
+      context: ./frontend
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
@@ -69,7 +69,4 @@ services:
       - ai-pm-api
     container_name: ai-tools-pm-ui
 
-volumes:
-  ai_pm_cache_vol:
-  ai_pm_db_vol:
-  ai_pm_storage_vol:
+# Volumes removed - using local bind mounts for better persistence and backup control
