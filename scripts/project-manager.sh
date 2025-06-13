@@ -51,7 +51,10 @@ format_task_summary() {
   Project: \(.project_name // "Unknown")
   Status: \(.status) | Priority: \(.priority)
   Description: \(.description // "No description provided")
-  Created: \(.created_at | split("T")[0]) | Updated: \(.updated_at | split("T")[0])
+  Created: \(.created_at | split("T")[0]) | Updated: \(.updated_at | split("T")[0])" + 
+  (if .notes and (.notes | length > 0) then
+    "\n  Notes:\n" + (.notes | map("    • " + .content + " (" + (.created_at | split("T")[0]) + ")") | join("\n"))
+  else "" end) + "
   "'
 }
 
@@ -278,6 +281,92 @@ EOF
     fi
 }
 
+# Note management commands (ready for when API supports notes)
+
+cmd_add_note() {
+    local task_id="" content=""
+    
+    while getopts ":t:c:h" opt; do
+        case $opt in
+            t) task_id="$OPTARG" ;;
+            c) content="$OPTARG" ;;
+            h) cat <<EOF
+Usage: $0 add-note -t TASK_ID -c CONTENT [-h]
+  -t TASK_ID     Task ID to add note to (required)
+  -c CONTENT     Note content (required)
+  -h             Show help
+
+Note: Notes functionality will be available when API supports it.
+EOF
+               return ;;
+            \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
+            :) print_error "Option -$OPTARG requires an argument"; return 1 ;;
+        esac
+    done
+    
+    if [[ -z "$task_id" || -z "$content" ]]; then
+        print_error "Task ID and content are required"
+        return 1
+    fi
+    
+    print_warning "Notes functionality not yet implemented in API"
+    print_info "Future: Would add note '$content' to task $task_id"
+}
+
+cmd_list_notes() {
+    local task_id=""
+    
+    while getopts ":t:h" opt; do
+        case $opt in
+            t) task_id="$OPTARG" ;;
+            h) cat <<EOF
+Usage: $0 list-notes -t TASK_ID [-h]
+  -t TASK_ID     Task ID to list notes for (required)
+  -h             Show help
+
+Note: Notes functionality will be available when API supports it.
+EOF
+               return ;;
+            \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
+        esac
+    done
+    
+    if [[ -z "$task_id" ]]; then
+        print_error "Task ID is required"
+        return 1
+    fi
+    
+    print_warning "Notes functionality not yet implemented in API"
+    print_info "Future: Would list notes for task $task_id"
+}
+
+cmd_delete_note() {
+    local note_id=""
+    
+    while getopts ":i:h" opt; do
+        case $opt in
+            i) note_id="$OPTARG" ;;
+            h) cat <<EOF
+Usage: $0 delete-note -i NOTE_ID [-h]
+  -i NOTE_ID     Note ID to delete (required)
+  -h             Show help
+
+Note: Notes functionality will be available when API supports it.
+EOF
+               return ;;
+            \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
+        esac
+    done
+    
+    if [[ -z "$note_id" ]]; then
+        print_error "Note ID is required"
+        return 1
+    fi
+    
+    print_warning "Notes functionality not yet implemented in API"
+    print_info "Future: Would delete note $note_id"
+}
+
 # Project management commands
 
 cmd_list_projects() {
@@ -432,6 +521,11 @@ Task Commands:
   update-task    Update task status
   delete-task    Delete a task
 
+Note Commands:
+  list-notes     List notes for a task
+  add-note       Add a note to a task
+  delete-note    Delete a note
+
 System Commands:
   setup          Check API health
   help           Show this help
@@ -446,6 +540,8 @@ Examples:
   $0 list-projects
   $0 add-project -n "New Project" -d "Project description"
   $0 delete-project -i 1
+  $0 add-note -t 42 -c "Progress update: completed initial analysis"
+  $0 list-notes -t 42
 
 Legacy format still supported:
   $0 add-task PROJECT_ID "Title" "Description" priority
@@ -468,6 +564,9 @@ EOF
         list-projects) check_deps; cmd_list_projects "$@" ;;
         add-project) check_deps; cmd_add_project "$@" ;;
         delete-project) check_deps; cmd_delete_project "$@" ;;
+        list-notes) check_deps; cmd_list_notes "$@" ;;
+        add-note) check_deps; cmd_add_note "$@" ;;
+        delete-note) check_deps; cmd_delete_note "$@" ;;
         setup) setup ;;
         help) main ;;
         # Legacy support
