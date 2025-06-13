@@ -2,6 +2,8 @@
 
 A universal desktop application for managing and working with AI development tools.
 
+> **🤖 AI-Assisted Development**: This application is developed using human-AI collaboration, with AI assistance in code generation, architecture design, and documentation.
+
 ## Features
 
 - 🎨 **Universal AI Tool Management** - Manage ComfyUI, Automatic1111, Ollama, LM Studio, and more

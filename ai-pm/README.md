@@ -2,6 +2,8 @@
 
 A modern, AI-driven project management system designed for development workflows.
 
+> **🤖 AI-Assisted Development**: This project management system is built using human-AI collaboration, demonstrating modern AI-assisted development practices.
+
 ## Features
 
 - ✅ Task and project tracking with soft delete
