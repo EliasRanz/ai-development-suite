@@ -222,6 +222,7 @@ def main():
             port=settings.PORT,
             logger=launcher_logger
         )
+        
         gui_manager_instance = GUIManager(
             app_name=settings.APP_NAME,
             window_width=settings.WINDOW_WIDTH,
@@ -232,6 +233,7 @@ def main():
             logger=launcher_logger,
             server_manager=server_manager_instance
         )
+        
         tray_manager_instance = TrayManager(
             app_name=settings.APP_NAME,
             assets_dir=settings.ASSETS_DIR,
@@ -239,8 +241,18 @@ def main():
             shutdown_event=app_shutdown_event, # Pass the event
             gui_manager=gui_manager_instance  # Pass gui_manager
         )
-
+        
         gui_manager_instance.prepare_and_launch_gui(shutdown_event_for_critical_error=app_shutdown_event)
+        
+        # Set the log path in the React app once it's loaded
+        def set_log_path_when_ready():
+            gui_manager_instance.is_window_loaded.wait(timeout=10)  # Wait up to 10 seconds
+            if gui_manager_instance.is_window_loaded.is_set():
+                gui_manager_instance.set_log_path(str(server_log_path))
+        
+        # Start thread to set log path
+        threading.Thread(target=set_log_path_when_ready, daemon=True).start()
+        
         tray_manager_instance.start()
 
         app_logic_thread_instance = threading.Thread(

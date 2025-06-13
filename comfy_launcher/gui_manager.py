@@ -29,6 +29,8 @@ class GUIManager:
         self.connect_host = connect_host
         self.port = port
         self.assets_dir = assets_dir
+        # Add path to React app build
+        self.web_dist_dir = self.assets_dir.parent / "web_dist"
         self.logger = logger
         self.server_manager = server_manager
         self.webview_window: Optional[webview.Window] = None # Type hint for clarity
@@ -73,25 +75,32 @@ class GUIManager:
         # Return True to prevent pywebview from closing the window immediately.
         # The actual window destruction will be handled by `handle_application_quit_request`
         # which is subscribed to the APPLICATION_QUIT_REQUESTED event.
-        return True
-    def on_loaded(self): # Renamed from _on_loaded to match event subscription
+        return True    def on_loaded(self): # Renamed from _on_loaded to match event subscription
         self.logger.info("🎉 Webview 'on_loaded' event fired!")
         current_url = self.webview_window.get_current_url() if self.webview_window else "N/A"
         self.logger.debug(f"Current URL in webview at on_loaded: {current_url}")
 
         if not self.initial_load_done:
-            # This is the first load (e.g. loading.html)
-            self.logger.debug("Initial window content loaded. Publishing GUI_WINDOW_CONTENT_LOADED event.")
+            # This is the first load (React app)
+            self.logger.debug("Initial React app loaded. Publishing GUI_WINDOW_CONTENT_LOADED event.")
             event_publisher.publish(AppEventType.GUI_WINDOW_CONTENT_LOADED)
             self.is_window_loaded.set()
             self.initial_load_done = True
+            
+            # Initialize React app with system theme
+            theme = settings.LAUNCHER_THEME if settings.LAUNCHER_THEME in ["dark", "light"] else self._get_system_theme_preference()
+            self.set_theme(theme)
+            
         else:
             self.logger.debug("Webview 'loaded' event fired again (e.g., after page navigation).")
             if self.webview_window and current_url and "settings.html" in current_url:
                  self.logger.info("Settings page has been loaded into the webview.")
                  self._execute_js("if (typeof initializeSettingsPage === 'function') { initializeSettingsPage(); } else { console.error('initializeSettingsPage function not found on settings.html'); }")
-            elif self.webview_window and current_url and ("loading.html" in current_url or "loading_generated.html" in current_url or "loading_intermediate.html" in current_url):
-                 self.logger.info("Loading page has been (re)loaded into the webview.")
+            elif self.webview_window and current_url and ("index.html" in current_url or "web_dist" in current_url):
+                 self.logger.info("React app has been (re)loaded into the webview.")
+                 # Re-initialize theme if React app reloads
+                 theme = settings.LAUNCHER_THEME if settings.LAUNCHER_THEME in ["dark", "light"] else self._get_system_theme_preference()
+                 self.set_theme(theme)
 
 
     def on_shown(self): # Renamed from _on_shown
@@ -174,7 +183,36 @@ class GUIManager:
             with open(self._loading_html_path, "w", encoding="utf-8") as f: f.write(final_content)
             self.logger.debug(f"Generated loading HTML written to: {self._loading_html_path}")
         except Exception as e: self.logger.warning(f"Could not write generated loading HTML: {e}")
-        return final_content
+        return final_content    def _prepare_react_app_html(self):
+        """
+        Loads the built React app HTML file and returns its content.
+        """
+        react_html_path = self.web_dist_dir / "index.html"
+        try:
+            with open(react_html_path, "r", encoding="utf-8") as f:
+                html_content = f.read()
+            
+            # Convert paths to file:// URLs for local file access
+            # Use pathlib for cross-platform path handling
+            web_dist_url = react_html_path.parent.as_uri()
+            
+            # Update asset paths to absolute file URLs
+            html_content = html_content.replace('src="./assets/', f'src="{web_dist_url}/assets/')
+            html_content = html_content.replace('href="./assets/', f'href="{web_dist_url}/assets/')
+            html_content = html_content.replace('href="/icon.png"', f'href="{web_dist_url}/icon.png"')
+            
+            self.logger.debug(f"Loaded React app HTML from: {react_html_path}")
+            self.logger.debug(f"Web dist URL: {web_dist_url}")
+            return html_content
+        except FileNotFoundError:
+            self.logger.error(f"React app HTML not found at: {react_html_path}")
+            self.logger.info("Falling back to legacy loading page...")
+            # Fallback to old loading page
+            return self._prepare_loading_html()
+        except Exception as e:
+            self.logger.error(f"Error loading React app HTML: {e}")
+            self.logger.info("Falling back to legacy loading page...")
+            return self._prepare_loading_html()
 
     def _execute_js(self, js_code: str):
         if self.webview_window:
@@ -190,15 +228,23 @@ class GUIManager:
         escaped_message = message.replace("\\", "\\\\").replace("'", "\\'")
         self._execute_js(f"if(typeof window.updateStatus === 'function') window.updateStatus('{escaped_message}');")
 
+    def set_log_path(self, path: str):
+        """Set the log file path in the React app"""
+        escaped_path = path.replace("\\", "\\\\").replace("'", "\\'")
+        self._execute_js(f"if(typeof window.setLogPath === 'function') window.setLogPath('{escaped_path}');")
+
+    def set_theme(self, theme: str):
+        """Set the theme in the React app"""
+        if theme in ['light', 'dark']:
+            self._execute_js(f"if(typeof window.setTheme === 'function') window.setTheme('{theme}');")
+
     def py_toggle_devtools(self):
         if self.webview_window: # pragma: no branch
             if settings.DEBUG: self.webview_window.toggle_devtools()
-            else: self.logger.info("Developer Tools are disabled (DEBUG mode is off).")
-
-    def prepare_and_launch_gui(self, shutdown_event_for_critical_error: Optional[threading.Event] = None):
+            else: self.logger.info("Developer Tools are disabled (DEBUG mode is off).")    def prepare_and_launch_gui(self, shutdown_event_for_critical_error: Optional[threading.Event] = None):
         try:
-            html_content = self._prepare_loading_html()
-            if not html_content: raise RuntimeError("Could not prepare HTML for loading page.")
+            html_content = self._prepare_react_app_html()
+            if not html_content: raise RuntimeError("Could not prepare HTML for React app.")
             self.logger.info("🪟 Creating GUI window by loading HTML content directly...")
             self.webview_window = webview.create_window(
                 self.app_name, html=html_content, width=self.window_width,
@@ -237,41 +283,17 @@ class GUIManager:
                 self.logger.info("Webview window destroyed by handle_application_quit_request.")
             except Exception as e:
                 self.logger.error(f"Error destroying window in handle_application_quit_request: {e}", exc_info=True)
-        # No need to call window.close() JS anymore, as this handler now directly destroys.
-
-    def load_error_page(self, message: str):
+        # No need to call window.close() JS anymore, as this handler now directly destroys.    def load_error_page(self, message: str):
         self.logger.error(f"Loading error page with message: {message}")
-        error_html_content = self._get_asset_content("error.html")
-        if not error_html_content:
-            self.logger.error("error.html is missing! Using critical_error.html as fallback.")
-            error_html_content = self._get_asset_content("critical_error.html", is_critical_fallback=True)
-        
-        # Replace placeholder in the error HTML
-        if "{ERROR_MESSAGE}" in error_html_content:
-            final_html = error_html_content.replace("{ERROR_MESSAGE}", message)
-        elif "{MESSAGE}" in error_html_content: # Fallback placeholder
-            final_html = error_html_content.replace("{MESSAGE}", message)
-        else: # No placeholder found, append the message
-            final_html = error_html_content + f"<p>Error: {message}</p>"
-            
-        if self.webview_window:
-            self.webview_window.load_html(final_html)
-        else:
-            self.logger.error("Cannot load error page: webview_window is None.")
+        # Use React app's error handling instead of loading new HTML
+        escaped_message = message.replace("\\", "\\\\").replace("'", "\\'")
+        self._execute_js(f"if(typeof window.showError === 'function') window.showError('{escaped_message}');")
 
     def load_critical_error_page(self, message: str):
         self.logger.critical(f"Loading critical error page with message: {message}")
-        critical_error_html = self._get_asset_content("critical_error.html", is_critical_fallback=True)
-        
-        if "{MESSAGE}" in critical_error_html:
-            final_html = critical_error_html.replace("{MESSAGE}", message)
-        else: # No placeholder found, append the message
-            final_html = critical_error_html + f"<p>Critical Error: {message}</p>"
-
-        if self.webview_window:
-            self.webview_window.load_html(final_html)
-        else:
-            self.logger.error("Cannot load critical error page: webview_window is None.")
+        # Use React app's critical error handling instead of loading new HTML
+        escaped_message = message.replace("\\", "\\\\").replace("'", "\\'")
+        self._execute_js(f"if(typeof window.showCriticalError === 'function') window.showCriticalError('{escaped_message}');")
 
 
     def redirect_when_ready_loop(self, stop_event: threading.Event,
