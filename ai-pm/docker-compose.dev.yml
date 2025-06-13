@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  ai-pm-api-dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    environment:
+      AI_PM_DB_HOST: ai-pm-database
+      AI_PM_DB_PORT: "5432"
+      AI_PM_DB_USER: ${AI_PM_DB_USER:-aipm}
+      AI_PM_DB_PASSWORD: ${AI_PM_DB_PASSWORD:-aipm123}
+      AI_PM_DB_NAME: ${AI_PM_DB_NAME:-ai_project_manager}
+      PORT: "8000"
+      AIR_ENABLED: "true"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - ai-pm-database
+      - ai-pm-cache
+      - ai-pm-storage
+    container_name: ai-tools-pm-api-dev
+    volumes:
+      # Mount source code for hot reload
+      - ./backend:/app:delegated
+      - /app/tmp  # Air build cache directory
+    networks:
+      - ai-pm_default
+
+  ai-pm-ui-dev:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+      CHOKIDAR_USEPOLLING: "true"  # For Docker file watching
+    ports:
+      - "3001:3000"
+    depends_on:
+      - ai-pm-api-dev
+    container_name: ai-tools-pm-ui-dev
+    volumes:
+      # Mount source code for HMR
+      - ./frontend/src:/app/src:delegated
+      - ./frontend/public:/app/public:delegated
+      - ./frontend/package.json:/app/package.json:delegated
+      - ./frontend/vite.config.ts:/app/vite.config.ts:delegated
+      - ./frontend/tsconfig.json:/app/tsconfig.json:delegated
+      - ./frontend/index.html:/app/index.html:delegated
+    networks:
+      - ai-pm_default
+
+networks:
+  ai-pm_default:
+    external: true

@@ -207,6 +207,28 @@ ai-pm-cli: ## Open AI Project Manager CLI
 	@echo "Opening AI Project Manager CLI..."
 	@./scripts/project-manager.sh
 
+# AI Project Manager Development
+ai-pm-dev-start: ## Start AI PM services with hot reload for development
+	@echo "Starting AI Project Manager in development mode..."
+	cd ai-pm && docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d ai-pm-database ai-pm-cache ai-pm-storage
+	@echo "Waiting for services to be ready..."
+	@sleep 5
+	cd ai-pm && docker-compose -f docker-compose.yml -f docker-compose.dev.yml up ai-pm-api-dev ai-pm-ui-dev
+
+ai-pm-dev-backend: ## Start only backend with hot reload
+	@echo "Starting AI PM backend with hot reload..."
+	cd ai-pm && docker-compose -f docker-compose.yml -f docker-compose.dev.yml up ai-pm-api-dev
+
+ai-pm-dev-frontend: ## Start only frontend with hot reload  
+	@echo "Starting AI PM frontend with hot reload..."
+	cd ai-pm && docker-compose -f docker-compose.yml -f docker-compose.dev.yml up ai-pm-ui-dev
+
+ai-pm-dev-logs: ## View development logs
+	cd ai-pm && docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs -f ai-pm-api-dev ai-pm-ui-dev
+
+ai-pm-dev-stop: ## Stop development services
+	cd ai-pm && docker-compose -f docker-compose.yml -f docker-compose.dev.yml down ai-pm-api-dev ai-pm-ui-dev
+
 # Quick start for new developers
 quick-start: check-env deps test ## Quick start for new developers
 	@echo ""
