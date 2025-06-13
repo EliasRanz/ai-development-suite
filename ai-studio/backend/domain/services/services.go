@@ -2,7 +2,7 @@ package services
 
 import (
 	"context"
-	"github.com/ai-studio/internal/domain/entities"
+	"github.com/ai-studio/backend/domain/entities"
 )
 
 // ToolManager defines the interface for managing AI tool instances

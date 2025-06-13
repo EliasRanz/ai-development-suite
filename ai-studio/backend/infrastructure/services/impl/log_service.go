@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ai-studio/internal/domain/services"
+	"github.com/ai-studio/backend/domain/services"
 )
 
 // LogService implements the LogService interface

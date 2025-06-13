@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ai-studio/internal/application/usecases"
-	"github.com/ai-studio/internal/domain/entities"
-	"github.com/ai-studio/internal/domain/services"
+	"github.com/ai-studio/backend/application/usecases"
+	"github.com/ai-studio/backend/domain/entities"
+	"github.com/ai-studio/backend/domain/services"
 )
 
 // App represents the Wails application with all use cases

@@ -1,12 +1,12 @@
 package container
 
 import (
-	"github.com/ai-studio/internal/application/usecases"
-	"github.com/ai-studio/internal/domain/repositories"
-	"github.com/ai-studio/internal/domain/services"
-	"github.com/ai-studio/internal/infrastructure/repositories/memory"
-	"github.com/ai-studio/internal/infrastructure/services/impl"
-	"github.com/ai-studio/internal/interfaces/wails"
+	"github.com/ai-studio/backend/application/usecases"
+	"github.com/ai-studio/backend/domain/repositories"
+	"github.com/ai-studio/backend/domain/services"
+	"github.com/ai-studio/backend/infrastructure/repositories/memory"
+	"github.com/ai-studio/backend/infrastructure/services/impl"
+	"github.com/ai-studio/backend/interfaces/wails"
 )
 
 // Container holds all dependencies

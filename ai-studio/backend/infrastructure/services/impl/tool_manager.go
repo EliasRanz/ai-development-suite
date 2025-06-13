@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ai-studio/internal/domain/entities"
-	"github.com/ai-studio/internal/domain/services"
+	"github.com/ai-studio/backend/domain/entities"
+	"github.com/ai-studio/backend/domain/services"
 	"github.com/google/uuid"
 )
 

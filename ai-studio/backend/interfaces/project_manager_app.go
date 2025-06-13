@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ai-studio/internal/domain"
+	"github.com/ai-studio/backend/domain"
 )
 
 // ProjectManagerApp handles project management functionality for Wails

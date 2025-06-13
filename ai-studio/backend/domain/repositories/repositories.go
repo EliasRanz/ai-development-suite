@@ -2,7 +2,7 @@ package repositories
 
 import (
 	"context"
-	"github.com/ai-studio/internal/domain/entities"
+	"github.com/ai-studio/backend/domain/entities"
 )
 
 // ConfigurationRepository handles persistence of tool configurations

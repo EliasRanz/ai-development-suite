@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/ai-studio/internal/domain/entities"
+	"github.com/ai-studio/backend/domain/entities"
 )
 
 // InstanceRepository is an in-memory implementation of the instance repository

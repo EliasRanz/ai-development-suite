@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ai-studio/internal/domain"
+	"github.com/ai-studio/backend/domain"
 	_ "github.com/lib/pq"
 )
 

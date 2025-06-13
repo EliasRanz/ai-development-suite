@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/ai-studio/internal/domain/entities"
+	"github.com/ai-studio/backend/domain/entities"
 )
 
 // ConfigurationRepository is an in-memory implementation of the configuration repository

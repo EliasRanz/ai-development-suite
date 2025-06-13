@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ai-studio/internal/domain/entities"
-	"github.com/ai-studio/internal/domain/repositories"
-	"github.com/ai-studio/internal/domain/services"
+	"github.com/ai-studio/backend/domain/entities"
+	"github.com/ai-studio/backend/domain/repositories"
+	"github.com/ai-studio/backend/domain/services"
 	"github.com/google/uuid"
 )
 
