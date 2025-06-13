@@ -687,12 +687,62 @@ func (pm *ProjectManager) GetDashboard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (pm *ProjectManager) HealthCheck(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	versionInfo := getVersionInfo()
+
+	response := map[string]interface{}{
 		"status":    "healthy",
 		"timestamp": time.Now(),
 		"service":   "ai-project-manager",
-	})
+		"version":   versionInfo,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// Version information structure
+type VersionInfo struct {
+	Version     string `json:"version"`
+	BuildTime   string `json:"build_time,omitempty"`
+	Environment string `json:"environment"`
+	Source      string `json:"source"`
+}
+
+// getVersionInfo dynamically determines the version information
+func getVersionInfo() VersionInfo {
+	version := VersionInfo{
+		Environment: getEnvironment(),
+	}
+
+	// Try to get version from environment variable first (for Docker builds)
+	if envVersion := os.Getenv("APP_VERSION"); envVersion != "" {
+		version.Version = envVersion
+		version.Source = "environment"
+		if buildTime := os.Getenv("BUILD_TIME"); buildTime != "" {
+			version.BuildTime = buildTime
+		}
+		return version
+	}
+
+	// Fallback to development version with timestamp
+	version.Version = fmt.Sprintf("dev-%d", time.Now().Unix())
+	version.Source = "fallback"
+	return version
+}
+
+// getEnvironment determines the current environment
+func getEnvironment() string {
+	if env := os.Getenv("ENVIRONMENT"); env != "" {
+		return env
+	}
+	if env := os.Getenv("NODE_ENV"); env != "" {
+		return env
+	}
+	// Check if we're running in Docker
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return "docker"
+	}
+	return "development"
 }
 
 // Database initialization

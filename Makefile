@@ -213,18 +213,31 @@ ai-pm-dev-start: ## Start AI PM services with hot reload for development
 	cd ai-pm && docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d ai-pm-database ai-pm-cache ai-pm-storage
 	@echo "Waiting for services to be ready..."
 	@sleep 5
-	cd ai-pm && docker-compose -f docker-compose.yml -f docker-compose.dev.yml up ai-pm-api-dev ai-pm-ui-dev
+	cd ai-pm && \
+		GIT_COMMIT=$$(git rev-parse HEAD 2>/dev/null || echo "unknown") \
+		GIT_BRANCH=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown") \
+		BUILD_TIME=$$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+		docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d ai-pm-api-dev ai-pm-ui-dev
+	@echo "Development services started in background. Use 'make ai-pm-dev-logs' to view logs."
 
 ai-pm-dev-backend: ## Start only backend with hot reload
 	@echo "Starting AI PM backend with hot reload..."
-	cd ai-pm && docker-compose -f docker-compose.yml -f docker-compose.dev.yml up ai-pm-api-dev
+	cd ai-pm && docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d ai-pm-api-dev
+	@echo "Backend started in background. Use 'make ai-pm-dev-logs' to view logs."
 
 ai-pm-dev-frontend: ## Start only frontend with hot reload  
 	@echo "Starting AI PM frontend with hot reload..."
-	cd ai-pm && docker-compose -f docker-compose.yml -f docker-compose.dev.yml up ai-pm-ui-dev
+	cd ai-pm && docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d ai-pm-ui-dev
+	@echo "Frontend started in background. Use 'make ai-pm-dev-logs' to view logs."
 
 ai-pm-dev-logs: ## View development logs
 	cd ai-pm && docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs -f ai-pm-api-dev ai-pm-ui-dev
+
+ai-pm-dev-logs-backend: ## View backend development logs only
+	cd ai-pm && docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs -f ai-pm-api-dev
+
+ai-pm-dev-logs-frontend: ## View frontend development logs only
+	cd ai-pm && docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs -f ai-pm-ui-dev
 
 ai-pm-dev-stop: ## Stop development services
 	cd ai-pm && docker-compose -f docker-compose.yml -f docker-compose.dev.yml down ai-pm-api-dev ai-pm-ui-dev

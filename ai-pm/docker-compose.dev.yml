@@ -14,8 +14,11 @@ services:
       AI_PM_DB_NAME: ${AI_PM_DB_NAME:-ai_project_manager}
       PORT: "8000"
       AIR_ENABLED: "true"
+      ENVIRONMENT: "development"
+      APP_VERSION: "dev-hotreload"
+      BUILD_TIME: "dynamic"
     ports:
-      - "8000:8000"
+      - "8001:8000"
     depends_on:
       - ai-pm-database
       - ai-pm-cache
@@ -34,10 +37,10 @@ services:
       dockerfile: Dockerfile.dev
     restart: unless-stopped
     environment:
-      VITE_API_BASE_URL: http://localhost:8000
+      VITE_API_BASE_URL: http://localhost:8001
       CHOKIDAR_USEPOLLING: "true"  # For Docker file watching
     ports:
-      - "3001:3000"
+      - "3002:3000"
     depends_on:
       - ai-pm-api-dev
     container_name: ai-tools-pm-ui-dev
