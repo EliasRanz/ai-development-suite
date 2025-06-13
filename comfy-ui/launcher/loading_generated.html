@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Launching ComfyUI</title>
+  <style>
+    /* CSS content will be injected here by the Python script */
+    body { margin: 0; padding: 20px; box-sizing: border-box; background-color: #1a1a1a; color: #f0f0f0; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; text-align: center; } .container { padding: 40px; background-color: #242424; border-radius: 8px; max-width: 500px; } .title { font-size: 1.8em; margin-bottom: 15px; } .accent { color: #0099ff; } #status-message { margin-top: 15px; color: #aaa; min-height: 1.2em; } .spinner { width: 50px; height: 50px; border: 5px solid #555; border-top-color: #0099ff; border-radius: 50%; margin: 0 auto 20px auto; animation: spin_simple 1.2s linear infinite; } @keyframes spin_simple { to { transform: rotate(360deg); } } #loader-wrapper { opacity: 1; } .fade-out { opacity: 0; transition: opacity 0.5s ease-out; }
+  </style>
+</head>
+<body>
+  <div id="loader-wrapper">
+    <div class="container">
+      <div class="spinner"></div>
+      <div class="title">Launching <span class="accent">ComfyUI</span></div>
+      <p id="status-message">Initializing...</p>
+      </div>
+  </div>
+
+  <script>
+    // JavaScript content will be injected here by the Python script
+    window.fadeOutLoading = function() {
+  const loader = document.getElementById("loader-wrapper");
+  if (loader) {
+    loader.classList.add("fade-out");
+  }
+};
+
+window.updateStatus = function(message) {
+  const statusEl = document.getElementById('status-message');
+  if (statusEl) {
+    statusEl.textContent = message;
+  }
+};
+
+// Listen for the F12 key to toggle developer tools (keep this)
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'F12' || event.keyCode === 123) {
+        event.preventDefault();
+        if (typeof window.py_toggle_devtools === 'function') {
+            window.py_toggle_devtools();
+        } else if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.py_toggle_devtools === 'function') {
+            window.pywebview.api.py_toggle_devtools();
+        } else {
+            console.warn('Python function "py_toggle_devtools" not found.');
+        }
+    }
+});
+  </script>
+</body>
+</html>
