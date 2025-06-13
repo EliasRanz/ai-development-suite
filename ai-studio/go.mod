@@ -37,4 +37,5 @@ require (
 	golang.org/x/text v0.22.0 // indirect
 )
 
-// replace github.com/wailsapp/wails/v2 v2.10.1 => /home/eliasranz/go/pkg/mod
+// Note: Use local Wails development version if needed
+// replace github.com/wailsapp/wails/v2 v2.10.1 => /path/to/local/wails

@@ -45,6 +45,16 @@ env.bak/
 venv.bak/
 ## Environment variable file (often at project root or in app directory)
 .env
+.env.local
+.env.production
+.env.development
+.env.staging
+*.env
+*secret*
+*.key
+*.pem
+config.local.*
+*passwords*
 
 # IDE / Editor specific
 .vscode/
