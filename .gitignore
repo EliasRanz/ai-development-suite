@@ -1,12 +1,25 @@
-# Python
+# Wails Build Outputs
+build/
+dist/
+*.exe
+*.app
+*.dmg
+*.deb
+*.rpm
+
+# Go
+*.go.mod.backup
+vendor/
+coverage.out
+coverage.html
+
+# Python (legacy)
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-build/
 develop-eggs/
-dist/
 downloads/
 eggs/
 .eggs/
@@ -58,6 +71,14 @@ comfy_launcher/logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Node.js dependencies
+node_modules/
+web-ui/node_modules/
+
+# Build outputs
+web-ui/dist/
+comfy_launcher/web_dist/
 
 # Generated files
 # If you decide not to commit the generated loading HTML:
