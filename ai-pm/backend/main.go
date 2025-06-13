@@ -530,7 +530,7 @@ func (pm *ProjectManager) GetNotes(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var notes []Note
+	var notes []Note = make([]Note, 0) // Initialize empty slice instead of nil
 	for rows.Next() {
 		var note Note
 		err := rows.Scan(&note.ID, &note.ProjectID, &note.TaskID, &note.Content, &note.CreatedAt)

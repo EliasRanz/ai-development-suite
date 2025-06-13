@@ -320,8 +320,6 @@ Usage: $0 add-note -t TASK_ID -c CONTENT [-h]
   -t TASK_ID     Task ID to add note to (required)
   -c CONTENT     Note content (required)
   -h             Show help
-
-Note: Notes functionality will be available when API supports it.
 EOF
                return ;;
             \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
@@ -334,8 +332,18 @@ EOF
         return 1
     fi
     
-    print_warning "Notes functionality not yet implemented in API"
-    print_info "Future: Would add note '$content' to task $task_id"
+    local data=$(jq -n --arg task_id "$task_id" --arg content "$content" '{task_id: ($task_id | tonumber), content: $content}')
+    local response=$(api_call POST "/notes" "$data")
+    
+    if echo "$response" | jq -e '.id' >/dev/null; then
+        local note_id=$(echo "$response" | jq -r '.id')
+        local created_at=$(echo "$response" | jq -r '.created_at')
+        print_success "Note #$note_id added to task $task_id"
+        print_info "Created: $created_at"
+    else
+        print_error "Failed to add note: $response"
+        return 1
+    fi
 }
 
 cmd_list_notes() {
@@ -348,8 +356,6 @@ cmd_list_notes() {
 Usage: $0 list-notes -t TASK_ID [-h]
   -t TASK_ID     Task ID to list notes for (required)
   -h             Show help
-
-Note: Notes functionality will be available when API supports it.
 EOF
                return ;;
             \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
@@ -361,8 +367,37 @@ EOF
         return 1
     fi
     
-    print_warning "Notes functionality not yet implemented in API"
-    print_info "Future: Would list notes for task $task_id"
+    local response=$(api_call GET "/notes?task_id=$task_id")
+    
+    if echo "$response" | jq -e 'type == "array"' >/dev/null; then
+        local count=$(echo "$response" | jq 'length')
+        
+        if [[ $count -eq 0 ]]; then
+            print_info "No notes found for task $task_id"
+            return
+        fi
+        
+        echo
+        # Custom header for notes table
+        printf "%-4s %-52s %-16s\n" "ID" "CONTENT" "CREATED"
+        printf "%.0s─" {1..76}
+        echo
+        
+        echo "$response" | jq -r '.[] | "\(.id)\t\(.content)\t\(.created_at)"' | while IFS=$'\t' read -r id content created_at; do
+            # Truncate content if too long
+            if [[ ${#content} -gt 50 ]]; then
+                content="${content:0:47}..."
+            fi
+            # Format date
+            created_date=$(date -d "$created_at" '+%Y-%m-%d %H:%M' 2>/dev/null || echo "$created_at")
+            printf "%-4s %-52s %-16s\n" "$id" "$content" "$created_date"
+        done
+        echo
+        print_info "Found $count note(s) for task $task_id"
+    else
+        print_error "Failed to retrieve notes: $response"
+        return 1
+    fi
 }
 
 cmd_delete_note() {
@@ -375,8 +410,6 @@ cmd_delete_note() {
 Usage: $0 delete-note -i NOTE_ID [-h]
   -i NOTE_ID     Note ID to delete (required)
   -h             Show help
-
-Note: Notes functionality will be available when API supports it.
 EOF
                return ;;
             \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
@@ -388,8 +421,15 @@ EOF
         return 1
     fi
     
-    print_warning "Notes functionality not yet implemented in API"
-    print_info "Future: Would delete note $note_id"
+    local response=$(api_call DELETE "/notes/$note_id")
+    
+    # DELETE returns 204 No Content on success, so check HTTP status
+    if [[ $? -eq 0 ]]; then
+        print_success "Note #$note_id deleted successfully"
+    else
+        print_error "Failed to delete note #$note_id: $response"
+        return 1
+    fi
 }
 
 # Project management commands
