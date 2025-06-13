@@ -107,3 +107,8 @@ scripts/project-manager-simple.sh
 - **Remove unused scripts** promptly
 - **Consolidate similar functionality** before it becomes bloat
 - **Update this document** when adding new categories of scripts
+
+## Related Documentation
+- **Environment Setup**: See [environment-setup.md](environment-setup.md) for standardized environment configuration
+- **Repository Structure**: See [../../REPOSITORY_STRUCTURE.md](../../REPOSITORY_STRUCTURE.md) for overall organization
+- **Contributing Guidelines**: See [../../CONTRIBUTING.md](../../CONTRIBUTING.md) for development practices

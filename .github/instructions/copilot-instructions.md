@@ -9,4 +9,9 @@ SOLID, DRY, KISS principles and API-first architecture.
 - Update existing scripts in place rather than creating new versions
 - Check for existing functionality before adding new scripts
 
+📋 **ENVIRONMENT**: Follow environment setup guidelines in `.github/instructions/environment-setup.md`
+- Use single `.env.template` as the authoritative source
+- Never create multiple root-level environment templates
+- Document all environment variables with clear comments
+
 Use project management CLI for task tracking: `./scripts/project-manager.sh list-tasks`

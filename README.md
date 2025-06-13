@@ -33,6 +33,19 @@ Legacy ComfyUI launcher components (being replaced by AI Studio).
 
 ## 🚀 Quick Start
 
+### Environment Setup
+Before using any tools, configure your environment:
+
+```bash
+# Copy the environment template
+cp .env.template .env
+
+# Edit .env with your specific configuration
+# Update passwords, paths, and API tokens as needed
+```
+
+> **Important**: Never commit the `.env` file to version control. Update all default passwords and generate secure secret keys for production use.
+
 ### AI Studio (Recommended)
 ```bash
 # Build the universal AI tools desktop app
