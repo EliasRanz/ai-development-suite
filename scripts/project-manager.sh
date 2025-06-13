@@ -20,6 +20,78 @@ print_error() { echo -e "${RED}✗${NC} $1" >&2; }
 print_warning() { echo -e "${YELLOW}⚠${NC} $1"; }
 print_info() { echo -e "${BLUE}ℹ${NC} $1"; }
 
+# Formatting helper functions
+format_table_header() {
+    local -a columns=("$@")
+    local widths=(4 30 35 12 8)  # Default column widths
+    
+    # Print header
+    printf "%-${widths[0]}s %-${widths[1]}s %-${widths[2]}s %-${widths[3]}s %-${widths[4]}s\n" "${columns[@]}"
+    
+    # Print separator
+    printf "%-${widths[0]}s %-${widths[1]}s %-${widths[2]}s %-${widths[3]}s %-${widths[4]}s\n" \
+        "──" "──────────────────────────────" "───────────────────────────────────" "────────────" "────────"
+}
+
+format_table_row() {
+    local id="$1" col1="$2" col2="$3" col3="$4" col4="$5"
+    local widths=(4 30 35 12 8)
+    
+    printf "%-${widths[0]}s %-${widths[1]}s %-${widths[2]}s %-${widths[3]}s %-${widths[4]}s\n" \
+        "$id" "${col1:0:29}" "${col2:0:34}" "$col3" "$col4"
+}
+
+format_task_summary() {
+    local response="$1"
+    echo
+    echo -e "${BLUE}Task Summary:${NC}"
+    echo "$response" | jq -r '.[] | 
+        "
+\u001b[0;33m► Task #\(.id): \(.title)\u001b[0m
+  Project: \(.project_name // "Unknown")
+  Status: \(.status) | Priority: \(.priority)
+  Description: \(.description // "No description provided")
+  Created: \(.created_at | split("T")[0]) | Updated: \(.updated_at | split("T")[0])
+  "'
+}
+
+format_project_summary() {
+    local response="$1"
+    echo
+    echo -e "${BLUE}Project Summary:${NC}"
+    echo "$response" | jq -r '.[] | 
+        "
+\u001b[0;32m► Project #\(.id): \(.name)\u001b[0m
+  Status: \(.status)
+  Description: \(.description // "No description provided")
+  Created: \(.created_at | split("T")[0]) | Updated: \(.updated_at | split("T")[0])
+  "'
+}
+
+format_tasks_table() {
+    local response="$1"
+    format_table_header "ID" "PROJECT" "TITLE" "STATUS" "PRIORITY"
+    echo "$response" | jq -r '.[] | "\(.id)\t\(.project_name // "Unknown")\t\(.title)\t\(.status)\t\(.priority)"' |
+    while IFS=$'\t' read -r id project title status priority; do
+        format_table_row "$id" "$project" "$title" "$status" "$priority"
+    done
+}
+
+format_projects_table() {
+    local response="$1"
+    format_table_header "ID" "NAME" "DESCRIPTION" "STATUS" "UPDATED"
+    echo "$response" | jq -r '.[] | "\(.id)\t\(.name)\t\(.description // "")\t\(.status)\t\(.updated_at | split("T")[0])"' |
+    while IFS=$'\t' read -r id name description status updated; do
+        format_table_row "$id" "$name" "$description" "$status" "$updated"
+    done
+}
+
+# Data validation helpers
+is_empty_response() {
+    local response="$1"
+    [[ "$response" == "[]" ]] || [[ "$response" == "null" ]] || [[ -z "$response" ]]
+}
+
 # API call function
 api_call() {
     local method="$1" endpoint="$2" data="${3:-}"
@@ -73,32 +145,15 @@ EOF
     [[ -n "$project_id" ]] && endpoint="/tasks?project_id=$project_id"
     
     local response=$(api_call GET "$endpoint")
-    if [[ "$response" == "[]" ]]; then
+    if is_empty_response "$response"; then
         print_warning "No tasks found"
         return
     fi
     
     if [[ "$verbose" == true ]]; then
-        # Verbose: use summary format instead of table
-        echo
-        echo -e "${BLUE}Task Summary:${NC}"
-        echo "$response" | jq -r '.[] | 
-            "
-\u001b[0;33m► Task #\(.id): \(.title)\u001b[0m
-  Project: \(.project_name // "Unknown")
-  Status: \(.status) | Priority: \(.priority)
-  Description: \(.description // "No description provided")
-  Created: \(.created_at | split("T")[0]) | Updated: \(.updated_at | split("T")[0])
-  "'
+        format_task_summary "$response"
     else
-        # Regular: clean tabular format
-        printf "%-4s %-30s %-35s %-12s %-8s\n" "ID" "PROJECT" "TITLE" "STATUS" "PRIORITY"
-        printf "%-4s %-30s %-35s %-12s %-8s\n" "──" "──────────────────────────────" "───────────────────────────────────" "────────────" "────────"
-        
-        echo "$response" | jq -r '.[] | "\(.id)\t\(.project_name // "Unknown")\t\(.title)\t\(.status)\t\(.priority)"' |
-        while IFS=$'\t' read -r id project title status priority; do
-            printf "%-4s %-30s %-35s %-12s %-8s\n" "$id" "${project:0:29}" "${title:0:34}" "$status" "$priority"
-        done
+        format_tasks_table "$response"
     fi
 }
 
@@ -242,20 +297,15 @@ EOF
     done
     
     local response=$(api_call GET "/projects")
-    if [[ "$response" == "[]" ]] || [[ "$response" == "null" ]] || [[ -z "$response" ]]; then
+    if is_empty_response "$response"; then
         print_warning "No projects found"
         return
     fi
     
     if [[ "$verbose" == true ]]; then
-        echo "$response" | jq -r '.[] | "ID: \(.id) | \(.name) | \(.description // "No description")"'
+        format_project_summary "$response"
     else
-        printf "%-4s %-30s %-50s\n" "ID" "NAME" "DESCRIPTION"
-        printf "%-4s %-30s %-50s\n" "──" "──────────────────────────────" "──────────────────────────────────────────────────"
-        echo "$response" | jq -r '.[] | "\(.id)\t\(.name)\t\(.description // "")"' |
-        while IFS=$'\t' read -r id name description; do
-            printf "%-4s %-30s %-50s\n" "$id" "${name:0:29}" "${description:0:49}"
-        done
+        format_projects_table "$response"
     fi
 }
 
