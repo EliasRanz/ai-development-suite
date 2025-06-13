@@ -58,8 +58,10 @@ cmd_list_tasks() {
             h) cat <<EOF
 Usage: $0 list-tasks [-p PROJECT_ID] [-v] [-h]
   -p PROJECT_ID  Filter by project ID
-  -v             Verbose output
+  -v             Verbose output (single line per task)
   -h             Show help
+
+Output includes: ID, Project Name, Title, Status, Priority
 EOF
                return ;;
             \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
@@ -76,13 +78,13 @@ EOF
     fi
     
     if [[ "$verbose" == true ]]; then
-        echo "$response" | jq -r '.[] | "ID: \(.id) | \(.title) | \(.status) | \(.priority)"'
+        echo "$response" | jq -r '.[] | "ID: \(.id) | Project: \(.project_name // "Unknown") | \(.title) | \(.status) | \(.priority)"'
     else
-        printf "%-4s %-50s %-12s\n" "ID" "TITLE" "STATUS"
-        printf "%-4s %-50s %-12s\n" "──" "──────────────────────────────────────────────────" "────────────"
-        echo "$response" | jq -r '.[] | "\(.id)\t\(.title)\t\(.status)"' |
-        while IFS=$'\t' read -r id title status; do
-            printf "%-4s %-50s %-12s\n" "$id" "${title:0:49}" "$status"
+        printf "%-4s %-30s %-35s %-12s %-8s\n" "ID" "PROJECT" "TITLE" "STATUS" "PRIORITY"
+        printf "%-4s %-30s %-35s %-12s %-8s\n" "──" "──────────────────────────────" "───────────────────────────────────" "────────────" "────────"
+        echo "$response" | jq -r '.[] | "\(.id)\t\(.project_name // "Unknown")\t\(.title)\t\(.status)\t\(.priority)"' |
+        while IFS=$'\t' read -r id project title status priority; do
+            printf "%-4s %-30s %-35s %-12s %-8s\n" "$id" "${project:0:29}" "${title:0:34}" "$status" "$priority"
         done
     fi
 }
@@ -208,6 +210,123 @@ EOF
     fi
 }
 
+# Project management commands
+
+cmd_list_projects() {
+    local verbose=false
+    
+    while getopts ":vh" opt; do
+        case $opt in
+            v) verbose=true ;;
+            h) cat <<EOF
+Usage: $0 list-projects [-v] [-h]
+  -v             Verbose output
+  -h             Show help
+EOF
+               return ;;
+            \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
+        esac
+    done
+    
+    local response=$(api_call GET "/projects")
+    if [[ "$response" == "[]" ]] || [[ "$response" == "null" ]] || [[ -z "$response" ]]; then
+        print_warning "No projects found"
+        return
+    fi
+    
+    if [[ "$verbose" == true ]]; then
+        echo "$response" | jq -r '.[] | "ID: \(.id) | \(.name) | \(.description // "No description")"'
+    else
+        printf "%-4s %-30s %-50s\n" "ID" "NAME" "DESCRIPTION"
+        printf "%-4s %-30s %-50s\n" "──" "──────────────────────────────" "──────────────────────────────────────────────────"
+        echo "$response" | jq -r '.[] | "\(.id)\t\(.name)\t\(.description // "")"' |
+        while IFS=$'\t' read -r id name description; do
+            printf "%-4s %-30s %-50s\n" "$id" "${name:0:29}" "${description:0:49}"
+        done
+    fi
+}
+
+cmd_add_project() {
+    local name="" description=""
+    
+    while getopts ":n:d:h" opt; do
+        case $opt in
+            n) name="$OPTARG" ;;
+            d) description="$OPTARG" ;;
+            h) cat <<EOF
+Usage: $0 add-project -n NAME [-d DESCRIPTION] [-h]
+  -n NAME        Project name (required)
+  -d DESCRIPTION Project description
+  -h             Show help
+EOF
+               return ;;
+            \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
+            :) print_error "Option -$OPTARG requires an argument"; return 1 ;;
+        esac
+    done
+    
+    if [[ -z "$name" ]]; then
+        print_error "Project name is required"
+        return 1
+    fi
+    
+    local data=$(jq -n \
+        --arg name "$name" \
+        --arg desc "$description" \
+        '{name: $name, description: $desc}')
+    
+    local response=$(api_call POST "/projects" "$data")
+    if echo "$response" | jq -e '.id' >/dev/null; then
+        local project_id=$(echo "$response" | jq -r '.id')
+        print_success "Project '$name' created successfully with ID: $project_id"
+    else
+        print_error "Failed to create project: $response"
+        return 1
+    fi
+}
+
+cmd_delete_project() {
+    local project_id=""
+    
+    while getopts ":i:h" opt; do
+        case $opt in
+            i) project_id="$OPTARG" ;;
+            h) cat <<EOF
+Usage: $0 delete-project -i PROJECT_ID [-h]
+  -i PROJECT_ID  Project ID to delete (required)
+  -h             Show help
+EOF
+               return ;;
+            \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
+            :) print_error "Option -$OPTARG requires an argument"; return 1 ;;
+        esac
+    done
+    
+    if [[ -z "$project_id" ]]; then
+        print_error "Project ID is required"
+        return 1
+    fi
+    
+    # Get project details first for confirmation
+    local project_info=$(api_call GET "/projects/$project_id")
+    if ! echo "$project_info" | jq -e '.id' >/dev/null; then
+        print_error "Project $project_id not found"
+        return 1
+    fi
+    
+    local name=$(echo "$project_info" | jq -r '.name // "Unknown"')
+    print_warning "Deleting project $project_id: $name"
+    
+    local response=$(api_call DELETE "/projects/$project_id")
+    
+    if [[ "$response" == "" ]] || echo "$response" | jq -e '.message' >/dev/null 2>&1; then
+        print_success "Project $project_id deleted successfully"
+    else
+        print_error "Failed to delete project: $response"
+        return 1
+    fi
+}
+
 # Legacy support functions (for backward compatibility)
 add_task() {
     print_warning "Legacy usage detected. Consider using: $0 add-task -p $1 -t \"$2\""
@@ -235,15 +354,22 @@ setup() {
 main() {
     if [[ $# -eq 0 ]]; then
         cat <<EOF
-${BLUE}AI Project Management CLI v2.1 (Enhanced)${NC}
+${BLUE}AI Project Management CLI v2.2 (Enhanced with Projects)${NC}
 
 Usage: $0 <command> [options]
 
-Commands:
+Project Commands:
+  list-projects  List all projects
+  add-project    Create a new project
+  delete-project Delete a project
+
+Task Commands:
   list-tasks     List tasks
   add-task       Add a new task  
   update-task    Update task status
   delete-task    Delete a task
+
+System Commands:
   setup          Check API health
   help           Show this help
 
@@ -254,6 +380,9 @@ Examples:
   $0 add-task -p 1 -t "Fix bug" -r high
   $0 update-task -i 42 -s done
   $0 delete-task -i 42
+  $0 list-projects
+  $0 add-project -n "New Project" -d "Project description"
+  $0 delete-project -i 1
 
 Legacy format still supported:
   $0 add-task PROJECT_ID "Title" "Description" priority
@@ -273,6 +402,9 @@ EOF
         add-task) check_deps; cmd_add_task "$@" ;;
         update-task) check_deps; cmd_update_task "$@" ;;
         delete-task) check_deps; cmd_delete_task "$@" ;;
+        list-projects) check_deps; cmd_list_projects "$@" ;;
+        add-project) check_deps; cmd_add_project "$@" ;;
+        delete-project) check_deps; cmd_delete_project "$@" ;;
         setup) setup ;;
         help) main ;;
         # Legacy support
