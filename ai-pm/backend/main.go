@@ -35,6 +35,8 @@ type Task struct {
 	Description    string     `json:"description"`
 	Status         string     `json:"status"`
 	Priority       string     `json:"priority"`
+	IsBlocked      bool       `json:"is_blocked"`
+	BlockedReason  *string    `json:"blocked_reason,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
 	DeletedAt      *time.Time `json:"deleted_at,omitempty"`
@@ -194,7 +196,7 @@ func (pm *ProjectManager) GetTasks(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 
 	query := `
-		SELECT t.id, t.project_id, t.title, t.description, t.status, t.priority, t.created_at, t.updated_at, p.name
+		SELECT t.id, t.project_id, t.title, t.description, t.status, t.priority, t.is_blocked, t.blocked_reason, t.created_at, t.updated_at, p.name
 		FROM tasks t 
 		JOIN projects p ON t.project_id = p.id 
 		WHERE t.deleted_at IS NULL AND p.deleted_at IS NULL
@@ -230,10 +232,18 @@ func (pm *ProjectManager) GetTasks(w http.ResponseWriter, r *http.Request) {
 	var tasks []Task
 	for rows.Next() {
 		var t Task
-		err := rows.Scan(&t.ID, &t.ProjectID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.CreatedAt, &t.UpdatedAt, &t.ProjectName)
+		var isBlocked sql.NullBool
+		err := rows.Scan(&t.ID, &t.ProjectID, &t.Title, &t.Description, &t.Status, &t.Priority, &isBlocked, &t.BlockedReason, &t.CreatedAt, &t.UpdatedAt, &t.ProjectName)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+
+		// Handle nullable boolean - default to false if null
+		if isBlocked.Valid {
+			t.IsBlocked = isBlocked.Bool
+		} else {
+			t.IsBlocked = false
 		}
 
 		// Fetch notes for this task
@@ -330,12 +340,34 @@ func (pm *ProjectManager) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	args := []interface{}{}
 	argCount := 1
 
-	for field, value := range updates {
-		switch field {
-		case "title", "description", "status", "priority":
-			setParts = append(setParts, fmt.Sprintf("%s = $%d", field, argCount))
-			args = append(args, value)
+	// Handle soft deletion
+	isDeleting := false
+	if status, ok := updates["status"].(string); ok && status == "deleted" {
+		isDeleting = true
+		setParts = append(setParts, fmt.Sprintf("status = $%d", argCount))
+		args = append(args, status)
+		argCount++
+
+		setParts = append(setParts, fmt.Sprintf("deleted_at = $%d", argCount))
+		args = append(args, time.Now())
+		argCount++
+
+		if deletionReason, ok := updates["deletion_reason"].(string); ok && deletionReason != "" {
+			setParts = append(setParts, fmt.Sprintf("deletion_reason = $%d", argCount))
+			args = append(args, deletionReason)
 			argCount++
+		}
+	}
+
+	// Handle regular field updates (skip if we're deleting)
+	if !isDeleting {
+		for field, value := range updates {
+			switch field {
+			case "title", "description", "status", "priority":
+				setParts = append(setParts, fmt.Sprintf("%s = $%d", field, argCount))
+				args = append(args, value)
+				argCount++
+			}
 		}
 	}
 
@@ -347,11 +379,96 @@ func (pm *ProjectManager) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	setParts = append(setParts, "updated_at = CURRENT_TIMESTAMP")
 	args = append(args, taskID)
 
-	query := fmt.Sprintf("UPDATE tasks SET %s WHERE id = $%d RETURNING id, project_id, title, description, status, priority, created_at, updated_at",
+	query := fmt.Sprintf("UPDATE tasks SET %s WHERE id = $%d RETURNING id, project_id, title, description, status, priority, is_blocked, blocked_reason, created_at, updated_at, deleted_at, deletion_reason",
 		strings.Join(setParts, ", "), argCount)
 
 	var t Task
-	err = pm.db.QueryRow(query, args...).Scan(&t.ID, &t.ProjectID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.CreatedAt, &t.UpdatedAt)
+	var isBlocked sql.NullBool
+	var deletedAt sql.NullTime
+	var deletionReason sql.NullString
+	err = pm.db.QueryRow(query, args...).Scan(&t.ID, &t.ProjectID, &t.Title, &t.Description, &t.Status, &t.Priority, &isBlocked, &t.BlockedReason, &t.CreatedAt, &t.UpdatedAt, &deletedAt, &deletionReason)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Task not found", http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Handle nullable boolean - default to false if null
+	if isBlocked.Valid {
+		t.IsBlocked = isBlocked.Bool
+	} else {
+		t.IsBlocked = false
+	}
+
+	// Handle nullable timestamp
+	if deletedAt.Valid {
+		t.DeletedAt = &deletedAt.Time
+	}
+
+	// Handle nullable deletion reason
+	if deletionReason.Valid {
+		t.DeletionReason = &deletionReason.String
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(t)
+}
+
+func (pm *ProjectManager) BlockTask(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid task ID", http.StatusBadRequest)
+		return
+	}
+
+	var requestBody struct {
+		Reason string `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if requestBody.Reason == "" {
+		http.Error(w, "Reason is required for blocking a task", http.StatusBadRequest)
+		return
+	}
+
+	query := `UPDATE tasks SET is_blocked = TRUE, blocked_reason = $1, updated_at = CURRENT_TIMESTAMP 
+			  WHERE id = $2 RETURNING id, project_id, title, description, status, priority, is_blocked, blocked_reason, created_at, updated_at`
+
+	var t Task
+	err = pm.db.QueryRow(query, requestBody.Reason, taskID).Scan(&t.ID, &t.ProjectID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.IsBlocked, &t.BlockedReason, &t.CreatedAt, &t.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Task not found", http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(t)
+}
+
+func (pm *ProjectManager) UnblockTask(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid task ID", http.StatusBadRequest)
+		return
+	}
+
+	query := `UPDATE tasks SET is_blocked = FALSE, blocked_reason = NULL, updated_at = CURRENT_TIMESTAMP 
+			  WHERE id = $1 RETURNING id, project_id, title, description, status, priority, is_blocked, blocked_reason, created_at, updated_at`
+
+	var t Task
+	err = pm.db.QueryRow(query, taskID).Scan(&t.ID, &t.ProjectID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.IsBlocked, &t.BlockedReason, &t.CreatedAt, &t.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Task not found", http.StatusNotFound)
@@ -833,6 +950,16 @@ func (pm *ProjectManager) initDatabase() {
 		log.Fatal("Failed to create priority_values table:", err)
 	}
 
+	// Add blocked columns to tasks table if they don't exist
+	alterTasksTable := `
+	ALTER TABLE tasks 
+	ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE,
+	ADD COLUMN IF NOT EXISTS blocked_reason TEXT NULL`
+
+	if _, err := pm.db.Exec(alterTasksTable); err != nil {
+		log.Fatal("Failed to add blocked columns to tasks table:", err)
+	}
+
 	// Seed default status values
 	pm.seedStatusValues()
 	pm.seedPriorityValues()
@@ -846,6 +973,7 @@ func (pm *ProjectManager) seedStatusValues() {
 		{Key: "in_progress", Label: "In Progress", Description: "Tasks currently being worked on", Color: "#3B82F6", SortOrder: 2, IsActive: true},
 		{Key: "review", Label: "Review", Description: "Tasks waiting for review or approval", Color: "#F59E0B", SortOrder: 3, IsActive: true},
 		{Key: "done", Label: "Done", Description: "Completed tasks", Color: "#10B981", SortOrder: 4, IsActive: true},
+		{Key: "deleted", Label: "Deleted", Description: "Tasks that have been deleted", Color: "#EF4444", SortOrder: 5, IsActive: false}, // Hidden from main board
 	}
 
 	for _, status := range statusValues {
@@ -885,7 +1013,7 @@ func (pm *ProjectManager) GetStatusValues(w http.ResponseWriter, r *http.Request
 	rows, err := pm.db.Query(`
 		SELECT id, key, label, description, color, sort_order, is_active, created_at
 		FROM status_values 
-		WHERE is_active = true 
+		WHERE is_active = true AND key != 'deleted'
 		ORDER BY sort_order`)
 
 	if err != nil {
@@ -957,14 +1085,20 @@ func main() {
 	api.HandleFunc("/projects/{id:[0-9]+}", pm.DeleteProject).Methods("DELETE")
 	api.HandleFunc("/tasks", pm.GetTasks).Methods("GET")
 	api.HandleFunc("/tasks", pm.CreateTask).Methods("POST")
+	api.HandleFunc("/tasks/deleted", pm.GetDeletedTasks).Methods("GET")
 	api.HandleFunc("/tasks/{id:[0-9]+}", pm.GetTask).Methods("GET")
 	api.HandleFunc("/tasks/{id:[0-9]+}", pm.UpdateTask).Methods("PUT")
 	api.HandleFunc("/tasks/{id:[0-9]+}", pm.DeleteTask).Methods("DELETE")
+	api.HandleFunc("/tasks/{id:[0-9]+}/recover", pm.RecoverTask).Methods("POST")
+	api.HandleFunc("/tasks/{id:[0-9]+}/block", pm.BlockTask).Methods("POST")
+	api.HandleFunc("/tasks/{id:[0-9]+}/unblock", pm.UnblockTask).Methods("POST")
 	api.HandleFunc("/status-values", pm.GetStatusValues).Methods("GET")
 	api.HandleFunc("/priority-values", pm.GetPriorityValues).Methods("GET")
 	api.HandleFunc("/notes", pm.GetNotes).Methods("GET")
 	api.HandleFunc("/notes", pm.CreateNote).Methods("POST")
 	api.HandleFunc("/notes/{id:[0-9]+}", pm.DeleteNote).Methods("DELETE")
+	api.HandleFunc("/tasks-deleted", pm.GetDeletedTasks).Methods("GET")
+	api.HandleFunc("/tasks/{id:[0-9]+}/recover", pm.RecoverTask).Methods("POST")
 
 	// CORS
 	c := cors.New(cors.Options{
@@ -1014,4 +1148,145 @@ func (pm *ProjectManager) getNotesForTask(taskID int) ([]Note, error) {
 	}
 
 	return notes, nil
+}
+
+// GetDeletedTasks retrieves all soft-deleted tasks
+func (pm *ProjectManager) GetDeletedTasks(w http.ResponseWriter, r *http.Request) {
+	projectID := r.URL.Query().Get("project_id")
+
+	query := `
+		SELECT t.id, t.project_id, t.title, t.description, t.status, t.priority, t.is_blocked, t.blocked_reason, t.created_at, t.updated_at, t.deleted_at, t.deletion_reason, p.name
+		FROM tasks t 
+		JOIN projects p ON t.project_id = p.id 
+		WHERE t.deleted_at IS NOT NULL AND p.deleted_at IS NULL
+	`
+	args := []interface{}{}
+
+	if projectID != "" {
+		query += " AND t.project_id = $1"
+		args = append(args, projectID)
+	}
+
+	query += " ORDER BY t.deleted_at DESC"
+
+	rows, err := pm.db.Query(query, args...)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var tasks []Task
+	for rows.Next() {
+		var t Task
+		var isBlocked sql.NullBool
+		err := rows.Scan(&t.ID, &t.ProjectID, &t.Title, &t.Description, &t.Status, &t.Priority, &isBlocked, &t.BlockedReason, &t.CreatedAt, &t.UpdatedAt, &t.DeletedAt, &t.DeletionReason, &t.ProjectName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Handle nullable boolean - default to false if null
+		if isBlocked.Valid {
+			t.IsBlocked = isBlocked.Bool
+		} else {
+			t.IsBlocked = false
+		}
+
+		// Fetch notes for this task
+		notes, err := pm.getNotesForTask(t.ID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		t.Notes = notes
+
+		tasks = append(tasks, t)
+	}
+
+	// Return empty array instead of null if no tasks found
+	if tasks == nil {
+		tasks = []Task{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(tasks)
+}
+
+// RecoverTask restores a soft-deleted task
+func (pm *ProjectManager) RecoverTask(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid task ID", http.StatusBadRequest)
+		return
+	}
+
+	var recoverRequest struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&recoverRequest); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Default to "todo" if no status provided
+	if recoverRequest.Status == "" {
+		recoverRequest.Status = "todo"
+	}
+
+	// Recover the task by clearing deletion fields and setting new status
+	result, err := pm.db.Exec(`
+		UPDATE tasks 
+		SET deleted_at = NULL, deletion_reason = NULL, status = $1, updated_at = CURRENT_TIMESTAMP 
+		WHERE id = $2 AND deleted_at IS NOT NULL`,
+		recoverRequest.Status, taskID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if rowsAffected == 0 {
+		http.Error(w, "Deleted task not found", http.StatusNotFound)
+		return
+	}
+
+	// Return the recovered task
+	var task Task
+	var isBlocked sql.NullBool
+	err = pm.db.QueryRow(`
+		SELECT t.id, t.project_id, t.title, t.description, t.status, t.priority, t.is_blocked, t.blocked_reason, t.created_at, t.updated_at, p.name
+		FROM tasks t 
+		JOIN projects p ON t.project_id = p.id 
+		WHERE t.id = $1 AND t.deleted_at IS NULL AND p.deleted_at IS NULL`, taskID).
+		Scan(&task.ID, &task.ProjectID, &task.Title, &task.Description, &task.Status, &task.Priority, &isBlocked, &task.BlockedReason, &task.CreatedAt, &task.UpdatedAt, &task.ProjectName)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Handle nullable boolean - default to false if null
+	if isBlocked.Valid {
+		task.IsBlocked = isBlocked.Bool
+	} else {
+		task.IsBlocked = false
+	}
+
+	// Fetch notes for this task
+	notes, err := pm.getNotesForTask(task.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	task.Notes = notes
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(task)
 }
