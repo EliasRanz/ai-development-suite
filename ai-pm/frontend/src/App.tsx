@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Project, Task, StatusValue, PriorityValue } from './types';
+import { Project, Task, StatusValue, PriorityValue, CreateTaskRequest, UpdateTaskRequest } from './types';
 import { api } from './api';
 import { usePolling } from './hooks/usePolling';
 import ProjectSelector from './components/ProjectSelector';
 import KanbanBoard from './components/KanbanBoard';
 import TaskModal from './components/TaskModal';
+import TaskPage from './components/TaskPage';
+import DeletedTasksView from './components/DeletedTasksView';
 import Header from './components/Header';
 import LoadingSpinner from './components/LoadingSpinner';
 import StatusIndicator from './components/StatusIndicator';
@@ -21,7 +23,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [currentView, setCurrentView] = useState<'kanban' | 'dashboard'>('kanban');
+  const [currentView, setCurrentView] = useState<'kanban' | 'dashboard' | 'deleted'>('kanban');
+  const [showTaskView, setShowTaskView] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const loadTasks = useCallback(async () => {
@@ -96,19 +99,14 @@ export default function App() {
     }
   };
 
-  const handleUpdateTask = async (taskData: {
-    title: string;
-    description: string;
-    priority: string;
-    status: string;
-  }) => {
+  const handleUpdateTask = async (taskData: UpdateTaskRequest) => {
     if (!editingTask) return;
 
     try {
       await api.updateTask(editingTask.id, taskData);
-      loadTasks();
-      setEditingTask(null);
+      await loadTasks(); // Reload tasks
       setShowTaskModal(false);
+      setEditingTask(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update task');
     }
@@ -183,24 +181,47 @@ export default function App() {
           </div>
         </div>
 
-        {selectedProject && currentView === 'kanban' && (
-          <KanbanBoard
-            tasks={tasks}
+        {showTaskView && editingTask ? (
+          <TaskPage
+            task={editingTask}
             statusValues={statusValues}
             priorityValues={priorityValues}
-            onEditTask={(task: Task) => {
-              setEditingTask(task);
-              setShowTaskModal(true);
+            onSave={handleUpdateTask}
+            onBack={() => {
+              setShowTaskView(false);
+              setEditingTask(null);
             }}
           />
-        )}
+        ) : (
+          <>
+            {selectedProject && currentView === 'kanban' && (
+              <KanbanBoard
+                tasks={tasks}
+                statusValues={statusValues}
+                priorityValues={priorityValues}
+                onViewTask={(task: Task) => {
+                  setEditingTask(task);
+                  setShowTaskView(true);
+                }}
+              />
+            )}
 
-        {currentView === 'dashboard' && (
-          <div className="text-center py-12">
-            <BarChart3 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-500">Dashboard Coming Soon</h3>
-            <p className="text-gray-400">Analytics and project insights will be available here.</p>
-          </div>
+            {currentView === 'dashboard' && (
+              <div className="text-center py-12">
+                <BarChart3 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-500">Dashboard Coming Soon</h3>
+                <p className="text-gray-400">Analytics and project insights will be available here.</p>
+              </div>
+            )}
+
+            {currentView === 'deleted' && (
+              <DeletedTasksView
+                selectedProjectId={selectedProject?.id}
+                statusValues={statusValues}
+                onTaskRecovered={loadTasks}
+              />
+            )}
+          </>
         )}
       </div>
 

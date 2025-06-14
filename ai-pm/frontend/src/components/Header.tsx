@@ -1,10 +1,9 @@
 import { Project } from '../types';
-import { BarChart3, Layout } from 'lucide-react';
-import StatusIndicator from './StatusIndicator';
+import { BarChart3, Layout, Trash2 } from 'lucide-react';
 
 interface HeaderProps {
-  currentView: 'kanban' | 'dashboard';
-  onViewChange: (view: 'kanban' | 'dashboard') => void;
+  currentView: 'kanban' | 'dashboard' | 'deleted';
+  onViewChange: (view: 'kanban' | 'dashboard' | 'deleted') => void;
   selectedProject: Project | null;
 }
 
@@ -21,9 +20,7 @@ export default function Header({ currentView, onViewChange, selectedProject }: H
           )}
         </div>
         
-        <div className="flex items-center space-x-4">
-          <StatusIndicator />
-          
+        <div className="flex items-center space-x-4">          
           <nav className="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
             <button
               onClick={() => onViewChange('kanban')}
@@ -46,6 +43,17 @@ export default function Header({ currentView, onViewChange, selectedProject }: H
             >
               <BarChart3 className="w-4 h-4" />
               <span>Dashboard</span>
+            </button>
+            <button
+              onClick={() => onViewChange('deleted')}
+              className={`flex items-center space-x-2 px-3 py-2 rounded-md transition-colors ${
+                currentView === 'deleted'
+                  ? 'bg-white text-red-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Deleted</span>
             </button>
           </nav>
         </div>

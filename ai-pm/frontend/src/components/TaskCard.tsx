@@ -1,13 +1,14 @@
 import { Task, PriorityValue } from '../types';
-import { Clock, User, AlertCircle } from 'lucide-react';
+import { Clock, User, AlertTriangle } from 'lucide-react';
 
 interface TaskCardProps {
   task: Task;
   priorityConfig: PriorityValue;
-  onEdit: (task: Task) => void;
+  isBlocked?: boolean;
+  onView?: (task: Task) => void;
 }
 
-export default function TaskCard({ task, priorityConfig, onEdit }: TaskCardProps) {
+export default function TaskCard({ task, priorityConfig, isBlocked = false, onView }: TaskCardProps) {
   // Map priority colors to Tailwind classes
   const getColorClasses = (color: string) => {
     const colorMap: Record<string, string> = {
@@ -29,27 +30,42 @@ export default function TaskCard({ task, priorityConfig, onEdit }: TaskCardProps
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const isUrgent = priorityConfig.level >= 4;
-
   return (
     <div
-      className={`kanban-card ${priorityStyle} cursor-pointer hover:shadow-md transition-shadow`}
-      onClick={() => onEdit(task)}
+      className={`kanban-card ${priorityStyle} relative cursor-pointer hover:shadow-md transition-all duration-200 ${
+        isBlocked ? 'border-orange-400 border-2 bg-orange-100 ring-2 ring-orange-200' : ''
+      }`}
+      onClick={() => onView && onView(task)}
     >
       <div className="flex items-start justify-between mb-2">
-        <h4 className="font-medium text-sm leading-tight flex-1 pr-2">
-          {task.title}
-        </h4>
-        <span className="text-xs whitespace-nowrap flex items-center space-x-1">
+        <div className="flex items-start space-x-2 flex-1">
+          <span className="text-xs text-gray-500 font-mono">#{task.id}</span>
+          <h4 className="font-medium text-sm leading-tight flex-1 break-words">
+            {task.title}
+          </h4>
+        </div>
+        <span className="text-xs whitespace-nowrap flex items-center space-x-1 ml-2">
           {priorityConfig.icon && <span>{priorityConfig.icon}</span>}
           <span>{priorityConfig.label}</span>
         </span>
       </div>
 
       {task.description && (
-        <p className="text-gray-600 text-xs mb-3 line-clamp-3">
+        <p className="text-gray-600 text-xs mb-3 line-clamp-3 break-words">
           {task.description}
         </p>
+      )}
+
+      {isBlocked && task.blocked_reason && (
+        <div className="mb-3 p-2 bg-orange-200 border border-orange-300 rounded text-xs">
+          <div className="flex items-center space-x-1 mb-1">
+            <AlertTriangle className="w-3 h-3 text-orange-700" />
+            <span className="font-medium text-orange-800">Blocked</span>
+          </div>
+          <p className="text-orange-700 leading-tight break-words">
+            {task.blocked_reason}
+          </p>
+        </div>
       )}
 
       <div className="flex items-center justify-between text-xs text-gray-500">
@@ -66,11 +82,6 @@ export default function TaskCard({ task, priorityConfig, onEdit }: TaskCardProps
         )}
       </div>
 
-      {isUrgent && (
-        <div className="absolute top-2 right-2">
-          <AlertCircle className="w-4 h-4" style={{ color: priorityConfig.color }} />
-        </div>
-      )}
     </div>
   );
 }
