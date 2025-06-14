@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # API configuration
-API_BASE_URL="http://localhost:8000/api"
+API_BASE_URL="http://localhost:8001/api"
 
 # Color codes
 RED='\033[0;31m'
