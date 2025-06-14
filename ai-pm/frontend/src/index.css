@@ -10,13 +10,54 @@
 
 @layer components {
   .kanban-column {
-    @apply bg-white border border-gray-200 rounded-lg p-4;
+    @apply bg-white border border-gray-200 rounded-lg;
     min-height: 500px;
-    min-width: 280px;
+    width: 280px; /* Mobile first */
+    max-width: 100%;
+    padding: 0.75rem; /* 12px mobile */
+  }
+  
+  /* Responsive column widths and padding */
+  @media (min-width: 768px) {
+    .kanban-column {
+      width: 300px;
+      padding: 1rem; /* 16px tablet */
+    }
+  }
+  
+  @media (min-width: 1024px) {
+    .kanban-column {
+      width: 320px;
+      padding: 1rem; /* 16px desktop */
+    }
+  }
+  
+  @media (min-width: 1280px) {
+    .kanban-column {
+      width: 350px;
+      padding: 1.25rem; /* 20px large desktop */
+    }
+  }
+  
+  @media (min-width: 1536px) {
+    .kanban-column {
+      width: 380px;
+      padding: 1.5rem; /* 24px xl desktop */
+    }
   }
   
   .kanban-card {
-    @apply bg-white border rounded-lg p-3 mb-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer relative;
+    @apply bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer relative;
+    padding: 0.75rem; /* 12px */
+    margin-bottom: 0.75rem; /* 12px */
+  }
+  
+  /* Responsive card padding */
+  @media (min-width: 768px) {
+    .kanban-card {
+      padding: 1rem; /* 16px */
+      margin-bottom: 1rem; /* 16px */
+    }
   }
   
   .btn-primary {
