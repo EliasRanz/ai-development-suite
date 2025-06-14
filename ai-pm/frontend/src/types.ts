@@ -15,8 +15,12 @@ export interface Task {
   description: string;
   status: string;
   priority: string;
+  is_blocked: boolean;
+  blocked_reason?: string | null;
   created_at: string;
   updated_at: string;
+  deleted_at?: string | null;
+  deletion_reason?: string | null;
 }
 
 export interface Note {

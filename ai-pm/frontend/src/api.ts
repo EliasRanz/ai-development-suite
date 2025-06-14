@@ -1,4 +1,4 @@
-import { Project, Task, DashboardData, CreateProjectRequest, CreateTaskRequest, UpdateTaskRequest, StatusValue, PriorityValue } from './types';
+import { Project, Task, DashboardData, CreateProjectRequest, CreateTaskRequest, UpdateTaskRequest, StatusValue, PriorityValue, Note } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
@@ -74,6 +74,18 @@ export const api = {
     return response.json();
   },
 
+  async deleteTask(id: number, reason?: string): Promise<void> {
+    await fetchWithError(`${API_BASE_URL}/tasks/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason || 'Deleted via UI' }),
+    });
+  },
+
+  async updateTaskStatus(id: number, status: string): Promise<Task> {
+    return this.updateTask(id, { status });
+  },
+
   // Status and Priority values
   async getStatusValues(): Promise<StatusValue[]> {
     const response = await fetchWithError(`${API_BASE_URL}/status-values`);
@@ -82,6 +94,63 @@ export const api = {
 
   async getPriorityValues(): Promise<PriorityValue[]> {
     const response = await fetchWithError(`${API_BASE_URL}/priority-values`);
+    return response.json();
+  },
+
+  // Notes
+  async getTaskNotes(taskId: number): Promise<Note[]> {
+    const response = await fetchWithError(`${API_BASE_URL}/notes?task_id=${taskId}`);
+    return response.json();
+  },
+
+  async createNote(taskId: number, content: string): Promise<Note> {
+    const response = await fetchWithError(`${API_BASE_URL}/notes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task_id: taskId, content }),
+    });
+    return response.json();
+  },
+
+  async deleteNote(noteId: number): Promise<void> {
+    await fetchWithError(`${API_BASE_URL}/notes/${noteId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Task blocking
+  async blockTask(taskId: number, reason: string): Promise<Task> {
+    const response = await fetchWithError(`${API_BASE_URL}/tasks/${taskId}/block`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
+    return response.json();
+  },
+
+  async unblockTask(taskId: number): Promise<Task> {
+    const response = await fetchWithError(`${API_BASE_URL}/tasks/${taskId}/unblock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return response.json();
+  },
+
+  // Deleted tasks management
+  async getDeletedTasks(projectId?: number): Promise<Task[]> {
+    const params = new URLSearchParams();
+    if (projectId) params.append('project_id', projectId.toString());
+    
+    const response = await fetchWithError(`${API_BASE_URL}/tasks/deleted?${params}`);
+    return response.json();
+  },
+
+  async recoverTask(taskId: number, status: string = 'todo'): Promise<Task> {
+    const response = await fetchWithError(`${API_BASE_URL}/tasks/${taskId}/recover`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
     return response.json();
   },
 };
