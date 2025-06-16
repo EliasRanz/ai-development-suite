@@ -27,7 +27,7 @@ We need a solution that provides:
 ### Production Mode  
 - **Integrated Option**: Project management can be embedded in main Wails app
 - **OR Standalone Option**: Keep as separate service if preferred
-- **Shared Infrastructure**: Both modes use same PostgreSQL/Redis/MinIO
+- **Shared Infrastructure**: Both modes use the same PostgreSQL database
 
 ### Architecture
 
@@ -45,8 +45,6 @@ We need a solution that provides:
 
 **Infrastructure:**
 - PostgreSQL database (existing, working)
-- Redis cache (existing, working)
-- MinIO storage (existing, working)
 
 ## Rationale
 
@@ -84,7 +82,7 @@ We need a solution that provides:
 
 ### Infrastructure Benefits
 
-- **Keep What Works**: Retain solid PostgreSQL, Redis, MinIO infrastructure
+- **Keep What Works**: Retain solid PostgreSQL infrastructure
 - **Remove Problems**: Eliminate problematic API/Web containers
 - **Maintain CLI**: Keep existing CLI tools for AI agent interaction
 
@@ -106,7 +104,7 @@ We need a solution that provides:
 ### Phase 3: Enhancement
 - [ ] Add advanced features (filters, search, reporting)
 - [ ] Implement real-time updates
-- [ ] Add file attachments using MinIO
+- [ ] Add file attachments support
 - [ ] Create dashboard and analytics
 
 ## Consequences
@@ -126,7 +124,7 @@ We need a solution that provides:
 
 ### 🔄 **Maintained Benefits**
 - **CLI Tools**: Keep existing scripts for AI agent automation
-- **Infrastructure**: PostgreSQL, Redis, MinIO remain separate and reusable
+- **Infrastructure**: PostgreSQL remains separate and reusable
 - **Future Flexibility**: Can extract services later if needed (but unlikely)
 - **API Option**: Can still expose HTTP endpoints if required
 
@@ -142,7 +140,7 @@ This approach aligns ideally with our project goals:
 ## Migration from ADR 007
 
 This decision builds upon ADR 007 (AI Project Manager Migration) by:
-- **Keeping**: Infrastructure components (PostgreSQL, Redis, MinIO)
+- **Keeping**: Infrastructure components (PostgreSQL)
 - **Keeping**: Domain models and business logic
 - **Changing**: Application layer from separate services to Wails integration
 - **Improving**: Platform compatibility and performance

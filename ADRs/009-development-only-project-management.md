@@ -31,8 +31,6 @@ Create a **standalone, development-only project management service** that:
 ```
 Development Infrastructure (Always Running)
 ├── PostgreSQL (project data)
-├── Redis (caching) 
-├── MinIO (file storage)
 └── AI-PM Service (Go web server)
     ├── REST API (:8000)
     ├── Web UI (:3000)
@@ -53,8 +51,6 @@ AI Tools Launcher (Single Binary)
 
 ### Development Services (Docker)
 - **PostgreSQL**: Project data persistence
-- **Redis**: Caching layer
-- **MinIO**: File storage
 - **Go Service**: Simple web server with API and basic UI
 - **CLI Tools**: For AI agent interaction
 

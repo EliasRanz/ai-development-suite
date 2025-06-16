@@ -8,9 +8,7 @@ This system now uses local bind mounts for data persistence, providing better co
 ```
 ai-pm/
 ├── data/                 # Persistent data (excluded from git)
-│   ├── postgres/        # PostgreSQL database files
-│   ├── redis/           # Redis cache files
-│   └── minio/           # MinIO object storage files
+│   └── postgres/        # PostgreSQL database files
 ├── backups/             # Backup archives (excluded from git)
 └── scripts/
     ├── backup.sh        # Create backup
@@ -64,8 +62,6 @@ If corruption occurs:
 
 All persistent data is stored locally in the `./data/` directory:
 - **PostgreSQL**: `./data/postgres/` - All database content
-- **Redis**: `./data/redis/` - Cache and session data  
-- **MinIO**: `./data/minio/` - File storage and uploads
 
 This approach provides:
 - ✅ Easy backup and restore

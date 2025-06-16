@@ -15,19 +15,42 @@ A modern, AI-driven project management system designed for development workflows
 
 ## Quick Start
 
+### Development Setup (Recommended)
 ```bash
-# Setup the system
-./scripts/setup.sh
+# Start development environment with hot reloading
+AI_PM_MODE=dev make ai-pm-start
 
-# Use the CLI
+# Access the application
+# - Frontend: http://localhost:3002 (hot reload)
+# - API: http://localhost:8001/api (hot reload)
+```
+
+### Production Setup
+```bash
+# Start production environment
+make ai-pm-start
+
+# Access the application  
+# - Frontend: http://localhost:3000
+# - API: http://localhost:8000/api
+```
+
+### CLI Usage
+```bash
+# Use the project management CLI
 ./scripts/project-manager.sh list-tasks
+./scripts/project-manager.sh add-task -p 1 -t "New Task" -r high
 ```
 
 ## Architecture
 
 - **Backend**: Go API service with PostgreSQL
 - **Frontend**: React + TypeScript UI
-- **Infrastructure**: Docker Compose with Redis caching
+- **Infrastructure**: Docker Compose with PostgreSQL database
 - **CLI**: Bash script for automation
 
-See [documentation](docs/) for detailed information.
+See [documentation](docs/) for detailed information:
+
+- **[Development Setup](docs/DEVELOPMENT_SETUP.md)** - Complete development environment guide
+- **[Data Management](DATA_MANAGEMENT.md)** - Backup and data persistence guide
+- **API Documentation** - Will be automatically generated via OpenAPI/Swagger (planned)

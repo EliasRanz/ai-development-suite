@@ -12,7 +12,7 @@ We needed a robust, AI-friendly project management system for the universal AI t
 
 Migrate from Plane to a custom AI Project Manager system that:
 
-1. **Reuses Solid Infrastructure**: Keeps PostgreSQL, Redis, and MinIO components
+1. **Reuses Solid Infrastructure**: Keeps PostgreSQL database components
 2. **Custom Implementation**: Uses our own project management CLI and database schema
 3. **AI-Friendly Design**: Built specifically for AI agent interaction
 4. **Meaningful Naming**: Containers renamed to reflect AI Project Manager purpose
@@ -20,11 +20,11 @@ Migrate from Plane to a custom AI Project Manager system that:
 ## Implementation
 
 ### Container Renaming
-- `plane-redis` → `ai-pm-cache` (Redis cache)
 - `plane-db` → `ai-pm-database` (PostgreSQL database)  
-- `plane-minio` → `ai-pm-storage` (MinIO object storage)
 - `plane-api` → `ai-pm-api` (API backend)
 - `plane-web` → `ai-pm-web` (Web frontend)
+
+**Note**: Redis and MinIO storage were removed as they were not used by the application.
 
 ### Database Schema
 Simple, effective schema for project management:
