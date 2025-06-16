@@ -134,13 +134,15 @@ ai-pm-start: ## Start AI Project Manager services (auto-selects profile based on
 			RUNNING_PROD=$$(docker compose ps --services --filter "status=running" | grep -E "(ai-pm-api|ai-pm-ui)$$" | wc -l); \
 			if [ $$RUNNING_PROD -gt 0 ]; then \
 				echo "⚠️  Production environment is running. Stopping it to avoid conflicts..."; \
-				docker compose --profile production down; \
+				docker compose stop ai-pm-api ai-pm-ui; \
+				docker compose rm -f ai-pm-api ai-pm-ui; \
 			fi; \
 		else \
 			RUNNING_DEV=$$(docker compose ps --services --filter "status=running" | grep -E "(ai-pm-api-dev|ai-pm-ui-dev)" | wc -l); \
 			if [ $$RUNNING_DEV -gt 0 ]; then \
 				echo "⚠️  Development environment is running. Stopping it to avoid conflicts..."; \
-				docker compose --profile development down; \
+				docker compose stop ai-pm-api-dev ai-pm-ui-dev; \
+				docker compose rm -f ai-pm-api-dev ai-pm-ui-dev; \
 			fi; \
 		fi; \
 	}
@@ -149,34 +151,51 @@ ai-pm-start: ## Start AI Project Manager services (auto-selects profile based on
 	@sleep 5
 	@echo "✅ Services started: $(AI_PM_PORT_INFO)"
 
-ai-pm-stop: ## Stop AI Project Manager services (stops both environments)
-	@echo "Stopping AI Project Manager services..."
+ai-pm-stop: ## Stop AI Project Manager services (stops both environments, preserves database)
+	@echo "Stopping AI Project Manager services (preserving database)..."
+	@cd ai-pm && docker compose stop ai-pm-api ai-pm-ui ai-pm-api-dev ai-pm-ui-dev
+	@cd ai-pm && docker compose rm -f ai-pm-api ai-pm-ui ai-pm-api-dev ai-pm-ui-dev
+
+ai-pm-stop-prod: ## Stop only production environment (preserves database)
+	@echo "Stopping AI Project Manager production environment..."
+	@cd ai-pm && docker compose stop ai-pm-api ai-pm-ui
+	@cd ai-pm && docker compose rm -f ai-pm-api ai-pm-ui
+
+ai-pm-stop-dev: ## Stop only development environment (preserves database)
+	@echo "Stopping AI Project Manager development environment..."
+	@cd ai-pm && docker compose stop ai-pm-api-dev ai-pm-ui-dev
+	@cd ai-pm && docker compose rm -f ai-pm-api-dev ai-pm-ui-dev
+
+ai-pm-stop-all: ## Stop ALL services including database (use with caution)
+	@echo "⚠️  Stopping ALL AI Project Manager services INCLUDING DATABASE..."
 	@cd ai-pm && docker compose --profile production --profile development down
 
-ai-pm-stop-prod: ## Stop only production environment
-	@echo "Stopping AI Project Manager production environment..."
-	@cd ai-pm && docker compose --profile production down
-
-ai-pm-stop-dev: ## Stop only development environment
-	@echo "Stopping AI Project Manager development environment..."
-	@cd ai-pm && docker compose --profile development down
-
-ai-pm-restart: ## Restart AI Project Manager services (current mode only)
+ai-pm-restart: ## Restart AI Project Manager services (current mode only, preserves database)
 	@echo "Restarting AI Project Manager services..."
-	@cd ai-pm && docker compose --profile $(AI_PM_PROFILE) down
+	@cd ai-pm && { \
+		if [ "$(AI_PM_MODE)" = "dev" ]; then \
+			docker compose stop ai-pm-api-dev ai-pm-ui-dev; \
+			docker compose rm -f ai-pm-api-dev ai-pm-ui-dev; \
+		else \
+			docker compose stop ai-pm-api ai-pm-ui; \
+			docker compose rm -f ai-pm-api ai-pm-ui; \
+		fi; \
+	}
 	@cd ai-pm && docker compose --profile $(AI_PM_PROFILE) up -d
 	@echo "✅ Services restarted: $(AI_PM_PORT_INFO)"
 
-ai-pm-switch: ## Switch between development and production modes cleanly
+ai-pm-switch: ## Switch between development and production modes cleanly (preserves database)
 	@echo "Switching AI Project Manager from $(AI_PM_PROFILE) mode..."
 	@cd ai-pm && { \
 		if [ "$(AI_PM_MODE)" = "dev" ]; then \
 			echo "Switching from production to development mode..."; \
-			docker compose --profile production down; \
+			docker compose stop ai-pm-api ai-pm-ui; \
+			docker compose rm -f ai-pm-api ai-pm-ui; \
 			docker compose --profile development up -d; \
 		else \
 			echo "Switching from development to production mode..."; \
-			docker compose --profile development down; \
+			docker compose stop ai-pm-api-dev ai-pm-ui-dev; \
+			docker compose rm -f ai-pm-api-dev ai-pm-ui-dev; \
 			docker compose --profile production up -d; \
 		fi; \
 	}
