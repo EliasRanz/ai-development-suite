@@ -8,6 +8,11 @@ This project uses a custom AI-driven project management system designed exclusiv
 
 ## Quick Start for AI Agents
 
+**For new development machines, use the automated setup:**
+```bash
+make setup        # Cross-platform development environment setup
+```
+
 **Before using any project management commands, ensure services are running.**
 
 **See "Environment Selection Rules" section below to choose the appropriate startup mode.**

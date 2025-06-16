@@ -42,7 +42,7 @@ git clone https://github.com/EliasRanz/ai-development-suite.git
 cd ai-development-suite
 
 # Run cross-platform setup script
-make setup-dev
+make setup
 
 # Or preview what would be done first
 ./scripts/setup-dev-environment.sh --dry-run

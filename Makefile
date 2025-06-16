@@ -10,10 +10,10 @@ help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 # AI Studio Development (Wails + React)
-setup: ## Set up development environment (WSL recommended)
+setup: ## Set up complete development environment (cross-platform)
 	@echo "Setting up development environment..."
-	@chmod +x scripts/wsl/setup-dev.sh
-	@./scripts/wsl/setup-dev.sh
+	@chmod +x scripts/setup-dev-environment.sh
+	@./scripts/setup-dev-environment.sh
 
 dev: ## Start AI Studio development server with hot reload
 	@echo "Starting AI Studio development server..."
@@ -239,6 +239,9 @@ ai-pm-cli: ## Open AI Project Manager CLI
 quick-start: check-env deps test ## Quick start for new developers
 	@echo ""
 	@echo "🎉 Setup complete! Next steps:"
+	@echo "  Development Environment Setup:"
+	@echo "    make setup        # Complete cross-platform setup (recommended for new machines)"
+	@echo ""
 	@echo "  AI Studio Development:"
 	@echo "    make dev          # Start AI Studio development server"
 	@echo "    make build        # Build AI Studio for production"

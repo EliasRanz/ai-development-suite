@@ -19,7 +19,7 @@ git clone https://github.com/EliasRanz/ai-development-suite.git
 cd ai-development-suite
 
 # Run the cross-platform setup script
-make setup-dev
+make setup
 # OR directly: ./scripts/setup-dev-environment.sh
 ```
 
@@ -210,7 +210,7 @@ Our cross-platform setup script provides a comprehensive, intelligent onboarding
    - No changes to your system
    - Builds confidence before proceeding
 
-2. **Full Setup**: `make setup-dev`
+2. **Full Setup**: `make setup`
    - Complete environment setup
    - Secure credential generation
    - Validation and testing
