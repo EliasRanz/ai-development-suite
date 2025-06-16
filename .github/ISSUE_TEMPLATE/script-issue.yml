@@ -1,0 +1,291 @@
+name: 🐛 Script Issue Report
+description: Report issues with setup scripts, CLI tools, or other automation
+title: "[SCRIPT] "
+labels: ["bug", "scripts", "help wanted"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a script issue! Please provide detailed information to help us diagnose and fix the problem quickly.
+        
+        **For AI Agent Troubleshooting:** This template is designed to provide sufficient context for automated diagnosis.
+
+  - type: dropdown
+    id: script-type
+    attributes:
+      label: Script Type
+      description: Which script or tool are you having issues with?
+      options:
+        - setup-dev-environment.sh
+        - project-manager.sh (CLI)
+        - env-helper.sh
+        - security/validate-permissions.sh
+        - Makefile targets
+        - Docker Compose setup
+        - Other (specify in description)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating System
+      description: What operating system are you using?
+      options:
+        - Windows (WSL2)
+        - Windows (Git Bash/Native)
+        - macOS
+        - Linux (Ubuntu/Debian)
+        - Linux (CentOS/RHEL)
+        - Linux (Arch)
+        - Other (specify in description)
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS Version Details
+      description: "Example: WSL2 Ubuntu 22.04, macOS 13.5, Windows 11"
+      placeholder: "WSL2 Ubuntu 22.04"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Issue Type
+      description: What type of problem are you experiencing?
+      options:
+        - Script fails to run (permission/execution error)
+        - Script runs but fails during execution
+        - Dependencies not found/installed correctly
+        - Environment detection issues
+        - API connectivity problems
+        - Service startup failures
+        - Configuration errors
+        - Performance issues
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: textarea
+    id: command-executed
+    attributes:
+      label: Command Executed
+      description: What exact command did you run? Include any flags/options used.
+      placeholder: |
+        Example:
+        ./scripts/setup-dev-environment.sh --verbose
+        make ai-pm-start
+        ./scripts/project-manager.sh list-tasks
+      render: bash
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: "Script should complete successfully and start services..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: What actually happened? Include the full error message.
+      placeholder: "Script failed with error: ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: error-output
+    attributes:
+      label: Complete Error Output
+      description: |
+        Paste the COMPLETE error output. Include at least 20 lines before and after the error.
+        Run with --verbose flag if available for more detailed output.
+      placeholder: |
+        $ ./scripts/setup-dev-environment.sh --verbose
+        [INFO] Detected Windows Subsystem for Linux (WSL)
+        [ERROR] Docker not found...
+        
+        (paste complete output here)
+      render: bash
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment-info
+    attributes:
+      label: Environment Information
+      description: |
+        Please run these commands and paste the output:
+        ```bash
+        # System info
+        uname -a
+        
+        # For WSL users
+        cat /proc/version
+        
+        # Shell info
+        echo $SHELL
+        echo $0
+        
+        # PATH
+        echo $PATH
+        
+        # Available tools
+        which docker || echo "Docker not found"
+        which docker-compose || echo "Docker Compose not found"
+        which node || echo "Node.js not found"
+        which npm || echo "npm not found"
+        which go || echo "Go not found"
+        which git || echo "Git not found"
+        which curl || echo "curl not found"
+        which jq || echo "jq not found"
+        
+        # Docker info (if available)
+        docker --version 2>/dev/null || echo "Docker not available"
+        docker-compose --version 2>/dev/null || echo "Docker Compose not available"
+        
+        # Node info (if available)
+        node --version 2>/dev/null || echo "Node.js not available"
+        npm --version 2>/dev/null || echo "npm not available"
+        ```
+      placeholder: |
+        $ uname -a
+        Linux hostname 5.15.0-1234-microsoft #1 SMP...
+        
+        $ cat /proc/version
+        Linux version 5.15.0-1234-microsoft...
+        
+        (paste all command outputs here)
+      render: bash
+    validations:
+      required: true
+
+  - type: textarea
+    id: project-structure
+    attributes:
+      label: Project Structure Check
+      description: |
+        Run this command to show your project structure:
+        ```bash
+        ls -la
+        ls -la scripts/ 2>/dev/null || echo "scripts/ directory not found"
+        ls -la ai-pm/ 2>/dev/null || echo "ai-pm/ directory not found" 
+        ```
+      placeholder: |
+        $ ls -la
+        total 123
+        drwxr-xr-x 12 user user 4096 Jun 16 12:34 .
+        -rw-r--r--  1 user user 1234 Jun 16 12:34 README.md
+        ...
+        
+        $ ls -la scripts/
+        -rwxr-xr-x 1 user user 12345 Jun 16 12:34 setup-dev-environment.sh
+        ...
+      render: bash
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs-and-files
+    attributes:
+      label: Relevant Log Files and Configurations
+      description: |
+        If applicable, include contents of:
+        - ai-pm/.env (remove sensitive values)
+        - Docker container logs
+        - Any error log files
+        - Relevant configuration files
+      placeholder: |
+        # Contents of ai-pm/.env (sensitive values removed)
+        POSTGRES_DB=ai_pm
+        POSTGRES_USER=postgres
+        POSTGRES_PASSWORD=***REMOVED***
+        
+        # Docker logs (if applicable)
+        $ docker logs ai-pm-postgres
+        ...
+      render: bash
+
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: Steps to Reproduce
+      description: Provide detailed steps to reproduce the issue
+      placeholder: |
+        1. Clone the repository
+        2. Navigate to the project directory
+        3. Run `./scripts/setup-dev-environment.sh`
+        4. Error occurs at step X
+    validations:
+      required: true
+
+  - type: textarea
+    id: workarounds-tried
+    attributes:
+      label: Workarounds Attempted
+      description: What have you already tried to fix the issue?
+      placeholder: |
+        - Tried running with sudo
+        - Restarted Docker
+        - Cleared npm cache
+        - Checked file permissions
+        - etc.
+
+  - type: checkboxes
+    id: pre-flight-checks
+    attributes:
+      label: Pre-flight Checks
+      description: Please confirm you've completed these basic checks
+      options:
+        - label: I'm using the latest version from the main branch
+          required: true
+        - label: I've read the README.md and SETUP.md documentation
+          required: true
+        - label: I've checked existing issues for similar problems
+          required: true
+        - label: I've included complete error output (not truncated)
+          required: true
+        - label: I've removed sensitive information from logs/configs
+          required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: |
+        Any other information that might be helpful:
+        - Network restrictions/firewalls
+        - Corporate environment specifics
+        - Previous successful runs
+        - Recent system changes
+        - Screenshots (if UI-related)
+      placeholder: "Any additional context that might help diagnose the issue..."
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        
+        **For Maintainers/AI Agents:**
+        
+        This issue template provides comprehensive information for automated troubleshooting:
+        - Environment detection and compatibility
+        - Complete error context and reproduction steps
+        - System configuration and tool availability
+        - Project structure validation
+        
+        Use this information to:
+        1. Identify environment-specific issues
+        2. Reproduce the problem locally
+        3. Suggest targeted solutions
+        4. Update scripts for better compatibility

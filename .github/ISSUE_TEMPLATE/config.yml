@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📚 Documentation
+    url: https://github.com/EliasRanz/ai-development-suite/blob/main/README.md
+    about: Check our documentation for setup guides and troubleshooting
+  - name: 💬 Discussions
+    url: https://github.com/EliasRanz/ai-development-suite/discussions
+    about: Ask questions and discuss features with the community
+  - name: 🔧 Setup Guide
+    url: https://github.com/EliasRanz/ai-development-suite/blob/main/SETUP.md
+    about: Complete setup instructions for development environment
