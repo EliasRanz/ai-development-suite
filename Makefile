@@ -128,29 +128,85 @@ AI_PM_PORT_INFO := $(if $(filter dev,$(AI_PM_MODE)),Frontend: http://localhost:3
 
 ai-pm-start: ## Start AI Project Manager services (auto-selects profile based on AI_PM_MODE)
 	@echo "Starting AI Project Manager in $(AI_PM_PROFILE) mode..."
+	@echo "Checking for conflicting environments..."
+	@cd ai-pm && { \
+		if [ "$(AI_PM_MODE)" = "dev" ]; then \
+			RUNNING_PROD=$$(docker compose ps --services --filter "status=running" | grep -E "(ai-pm-api|ai-pm-ui)$$" | wc -l); \
+			if [ $$RUNNING_PROD -gt 0 ]; then \
+				echo "⚠️  Production environment is running. Stopping it to avoid conflicts..."; \
+				docker compose --profile production down; \
+			fi; \
+		else \
+			RUNNING_DEV=$$(docker compose ps --services --filter "status=running" | grep -E "(ai-pm-api-dev|ai-pm-ui-dev)" | wc -l); \
+			if [ $$RUNNING_DEV -gt 0 ]; then \
+				echo "⚠️  Development environment is running. Stopping it to avoid conflicts..."; \
+				docker compose --profile development down; \
+			fi; \
+		fi; \
+	}
 	@cd ai-pm && docker compose --profile $(AI_PM_PROFILE) up -d
 	@echo "Waiting for services to be ready..."
 	@sleep 5
 	@echo "✅ Services started: $(AI_PM_PORT_INFO)"
 
-ai-pm-stop: ## Stop AI Project Manager services
+ai-pm-stop: ## Stop AI Project Manager services (stops both environments)
 	@echo "Stopping AI Project Manager services..."
-	@cd ai-pm && docker compose down
+	@cd ai-pm && docker compose --profile production --profile development down
 
-ai-pm-restart: ## Restart AI Project Manager services
+ai-pm-stop-prod: ## Stop only production environment
+	@echo "Stopping AI Project Manager production environment..."
+	@cd ai-pm && docker compose --profile production down
+
+ai-pm-stop-dev: ## Stop only development environment
+	@echo "Stopping AI Project Manager development environment..."
+	@cd ai-pm && docker compose --profile development down
+
+ai-pm-restart: ## Restart AI Project Manager services (current mode only)
 	@echo "Restarting AI Project Manager services..."
-	@cd ai-pm && docker compose down
+	@cd ai-pm && docker compose --profile $(AI_PM_PROFILE) down
 	@cd ai-pm && docker compose --profile $(AI_PM_PROFILE) up -d
 	@echo "✅ Services restarted: $(AI_PM_PORT_INFO)"
 
+ai-pm-switch: ## Switch between development and production modes cleanly
+	@echo "Switching AI Project Manager from $(AI_PM_PROFILE) mode..."
+	@cd ai-pm && { \
+		if [ "$(AI_PM_MODE)" = "dev" ]; then \
+			echo "Switching from production to development mode..."; \
+			docker compose --profile production down; \
+			docker compose --profile development up -d; \
+		else \
+			echo "Switching from development to production mode..."; \
+			docker compose --profile development down; \
+			docker compose --profile production up -d; \
+		fi; \
+	}
+	@echo "Waiting for services to be ready..."
+	@sleep 5
+	@echo "✅ Services switched to $(AI_PM_PROFILE) mode: $(AI_PM_PORT_INFO)"
+
 ai-pm-status: ## Check AI Project Manager service status
-	@echo "AI Project Manager Status ($(AI_PM_PROFILE) mode)"
+	@echo "AI Project Manager Status"
 	@echo "============================================================================"
 	@cd ai-pm && { \
-		echo "CONTAINER NAME	STATUS	PORTS"; \
-		for service in $$(docker compose --profile $(AI_PM_PROFILE) config --services); do \
-			docker compose ps $$service --format "{{.Name}}	{{.Status}}	{{.Ports}}" 2>/dev/null; \
-		done; \
+		PROD_RUNNING=$$(docker compose ps --services --filter "status=running" | grep -E "(ai-pm-api|ai-pm-ui)$$" | wc -l); \
+		DEV_RUNNING=$$(docker compose ps --services --filter "status=running" | grep -E "(ai-pm-api-dev|ai-pm-ui-dev)" | wc -l); \
+		DB_RUNNING=$$(docker compose ps --services --filter "status=running" | grep "ai-pm-database" | wc -l); \
+		echo "Database: $$([ $$DB_RUNNING -gt 0 ] && echo "✅ Running" || echo "❌ Stopped")"; \
+		echo "Production (ports 8000/3000): $$([ $$PROD_RUNNING -gt 0 ] && echo "✅ Running" || echo "❌ Stopped")"; \
+		echo "Development (ports 8001/3002): $$([ $$DEV_RUNNING -gt 0 ] && echo "✅ Running" || echo "❌ Stopped")"; \
+		echo ""; \
+		if [ $$PROD_RUNNING -gt 0 ] && [ $$DEV_RUNNING -gt 0 ]; then \
+			echo "⚠️  Both environments are running simultaneously"; \
+		elif [ $$PROD_RUNNING -gt 0 ]; then \
+			echo "🏭 Production environment active"; \
+		elif [ $$DEV_RUNNING -gt 0 ]; then \
+			echo "🔧 Development environment active"; \
+		else \
+			echo "💤 No API/UI services running"; \
+		fi; \
+		echo ""; \
+		echo "CONTAINER NAME        STATUS         PORTS"; \
+		docker compose ps --format "{{.Name}}	{{.Status}}	{{.Ports}}" 2>/dev/null; \
 	} | column -t -s '	'
 
 ai-pm-logs: ## Show AI Project Manager logs
