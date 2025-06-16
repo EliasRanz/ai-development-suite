@@ -10,6 +10,7 @@ set -e
 SKIP_TESTS=false
 VERBOSE=false
 DRY_RUN=false
+SHOW_TROUBLESHOOTING=false
 
 # Colors for output
 RED='\033[0;31m'
@@ -87,10 +88,12 @@ print_success() {
 
 print_warning() {
     echo -e "${YELLOW}[!]${NC} $1"
+    SHOW_TROUBLESHOOTING=true  # Flag to show troubleshooting tips
 }
 
 print_error() {
     echo -e "${RED}[✗]${NC} $1"
+    SHOW_TROUBLESHOOTING=true  # Flag to show troubleshooting tips
 }
 
 print_section() {
@@ -499,6 +502,41 @@ test_setup() {
     fi
 }
 
+# Show troubleshooting tips
+show_troubleshooting() {
+    print_section "Troubleshooting Tips"
+    
+    echo "If you encounter issues, try these solutions:"
+    echo ""
+    echo "🐳 **Docker Issues:**"
+    echo "   • Make sure Docker Desktop is running"
+    echo "   • Check Docker has enough resources (4GB+ RAM recommended)"
+    echo "   • Run: docker info"
+    echo ""
+    echo "🔧 **Tool Installation Issues:**"
+    echo "   • Add Go tools to PATH: export PATH=\$PATH:\$(go env GOPATH)/bin"
+    echo "   • Restart your shell after PATH changes"
+    echo "   • On macOS: Install Homebrew first"
+    echo "   • On Windows: Use WSL2 for better compatibility"
+    echo ""
+    echo "🌐 **Service Connection Issues:**"
+    echo "   • Wait 2-3 minutes for services to fully start"
+    echo "   • Check status: make ai-pm-status"
+    echo "   • View logs: make ai-pm-logs"
+    echo "   • Check ports aren't in use: netstat -tlnp | grep ':8000\\|:3000'"
+    echo ""
+    echo "📦 **Package Manager Issues:**"
+    echo "   • Update package lists: sudo apt update (Linux)"
+    echo "   • Update Homebrew: brew update (macOS)"
+    echo "   • Check internet connection for downloads"
+    echo ""
+    echo "🆘 **Still having trouble?**"
+    echo "   • Run with verbose output: $0 --verbose"
+    echo "   • Use dry-run to debug: $0 --dry-run"
+    echo "   • Check the documentation in .github/instructions/"
+    echo "   • File an issue at: https://github.com/EliasRanz/ai-development-suite/issues"
+}
+
 # Generate summary
 generate_summary() {
     print_section "Setup Complete!"
@@ -550,6 +588,16 @@ generate_summary() {
         echo "🔍 Setup completed at: $(date)"
         echo "💻 Platform: $OS"
         echo "🏠 Working directory: $(pwd)"
+        echo ""
+        echo "💡 Tip: Add this to your shell profile for convenience:"
+        echo "   alias ai-pm='make ai-pm-start'"
+        echo "   alias ai-pm-stop='make ai-pm-stop'"
+        echo "   alias ai-pm-status='make ai-pm-status'"
+    fi
+    
+    # Show troubleshooting if there were any warnings
+    if [[ "$SHOW_TROUBLESHOOTING" == "true" ]]; then
+        show_troubleshooting
     fi
 }
 
@@ -587,6 +635,7 @@ main() {
     install_dev_tools
     test_setup
     generate_summary
+    show_troubleshooting
 }
 
 # Run main function
