@@ -1,42 +1,68 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Project, Task, StatusValue, PriorityValue, CreateTaskRequest, UpdateTaskRequest } from './types';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Project, Task, StatusValue, PriorityValue, UpdateTaskRequest } from './types';
 import { api } from './api';
 import { usePolling } from './hooks/usePolling';
-import ProjectSelector from './components/ProjectSelector';
 import KanbanBoard from './components/KanbanBoard';
 import TaskModal from './components/TaskModal';
 import TaskPage from './components/TaskPage';
-import DeletedTasksView from './components/DeletedTasksView';
-import Header from './components/Header';
 import LoadingSpinner from './components/LoadingSpinner';
 import StatusIndicator from './components/StatusIndicator';
 import { Plus, BarChart3 } from 'lucide-react';
 
-export default function App() {
-  const [projects, setProjects] = useState<Project[]>([]);
+interface AppProps {
+  selectedProject: Project | null;
+}
+
+export default function App({ selectedProject }: AppProps) {
+  const navigate = useNavigate();
+  const { view, taskId } = useParams();
+  
   const [tasks, setTasks] = useState<Task[]>([]);
   const [statusValues, setStatusValues] = useState<StatusValue[]>([]);
   const [priorityValues, setPriorityValues] = useState<PriorityValue[]>([]);
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [currentView, setCurrentView] = useState<'kanban' | 'dashboard' | 'deleted'>('kanban');
-  const [showTaskView, setShowTaskView] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  // Determine current view from URL, default to kanban
+  const currentView = view || 'kanban';
+  const showTaskView = !!taskId;
+
+  // Utility function to create URL-friendly slug from project name
+  const createProjectSlug = (project: Project): string => {
+    return project.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  };
+
+  // Load specific task when taskId is in URL
+  useEffect(() => {
+    if (taskId && tasks.length > 0) {
+      const task = tasks.find(t => t.id.toString() === taskId);
+      if (task) {
+        setEditingTask(task);
+      }
+    } else if (!taskId) {
+      setEditingTask(null);
+    }
+  }, [taskId, tasks]);
 
   const loadTasks = useCallback(async () => {
     if (!selectedProject) return;
     try {
       setTasksLoading(true);
       const tasksData = await api.getTasks(selectedProject.id);
-      setTasks(tasksData);
+      setTasks(tasksData || []); // Ensure we never set null/undefined
       setLastUpdated(new Date());
       setError(null); // Clear any previous errors
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load tasks');
+      setTasks([]); // Set empty array on error to prevent null issues
     } finally {
       setTasksLoading(false);
     }
@@ -45,17 +71,12 @@ export default function App() {
   const loadInitialData = async () => {
     try {
       setLoading(true);
-      const [projectsData, statusData, priorityData] = await Promise.all([
-        api.getProjects(),
+      const [statusData, priorityData] = await Promise.all([
         api.getStatusValues(),
         api.getPriorityValues(),
       ]);
-      setProjects(projectsData);
       setStatusValues(statusData);
       setPriorityValues(priorityData);
-      if (projectsData.length > 0 && !selectedProject) {
-        setSelectedProject(projectsData[0]);
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
@@ -112,11 +133,6 @@ export default function App() {
     }
   };
 
-  const handleProjectChange = (project: Project) => {
-    setSelectedProject(project);
-    setTasks([]);
-  };
-
   const handleManualRefresh = () => {
     if (selectedProject) {
       loadTasks();
@@ -132,15 +148,9 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header
-        currentView={currentView}
-        onViewChange={setCurrentView}
-        selectedProject={selectedProject}
-      />
-
+    <>
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mx-6 mt-4">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
           {error}
           <button
             onClick={() => setError(null)}
@@ -151,79 +161,73 @@ export default function App() {
         </div>
       )}
 
-      <div className="p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center space-x-4">
-            <ProjectSelector
-              projects={projects}
-              selectedProject={selectedProject}
-              onProjectChange={handleProjectChange}
-            />
-          </div>
-
-          <div className="flex items-center space-x-3">
-            <StatusIndicator
-              lastUpdated={lastUpdated}
-              loading={tasksLoading}
-              error={error}
-              onRefresh={handleManualRefresh}
-            />
-            <button
-              onClick={() => {
-                setEditingTask(null);
-                setShowTaskModal(true);
-              }}
-              className="flex items-center space-x-2 btn-primary"
-            >
-              <Plus className="w-4 h-4" />
-              <span>New Task</span>
-            </button>
-          </div>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center space-x-4">
+          {selectedProject && (
+            <h2 className="text-xl font-semibold text-gray-900">
+              {selectedProject.name}
+            </h2>
+          )}
         </div>
 
-        {showTaskView && editingTask ? (
-          <TaskPage
-            task={editingTask}
-            statusValues={statusValues}
-            priorityValues={priorityValues}
-            onSave={handleUpdateTask}
-            onBack={() => {
-              setShowTaskView(false);
-              setEditingTask(null);
-            }}
+        <div className="flex items-center space-x-3">
+          <StatusIndicator
+            lastUpdated={lastUpdated}
+            loading={tasksLoading}
+            error={error}
+            onRefresh={handleManualRefresh}
           />
-        ) : (
-          <>
-            {selectedProject && currentView === 'kanban' && (
-              <KanbanBoard
-                tasks={tasks}
-                statusValues={statusValues}
-                priorityValues={priorityValues}
-                onViewTask={(task: Task) => {
-                  setEditingTask(task);
-                  setShowTaskView(true);
-                }}
-              />
-            )}
-
-            {currentView === 'dashboard' && (
-              <div className="text-center py-12">
-                <BarChart3 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-500">Dashboard Coming Soon</h3>
-                <p className="text-gray-400">Analytics and project insights will be available here.</p>
-              </div>
-            )}
-
-            {currentView === 'deleted' && (
-              <DeletedTasksView
-                selectedProjectId={selectedProject?.id}
-                statusValues={statusValues}
-                onTaskRecovered={loadTasks}
-              />
-            )}
-          </>
-        )}
+          <button
+            onClick={() => {
+              setEditingTask(null);
+              setShowTaskModal(true);
+            }}
+            className="flex items-center space-x-2 btn-primary"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Task</span>
+          </button>
+        </div>
       </div>
+
+      {showTaskView && editingTask ? (
+        <TaskPage
+          task={editingTask}
+          statusValues={statusValues}
+          priorityValues={priorityValues}
+          onSave={handleUpdateTask}
+          onBack={() => {
+            if (selectedProject) {
+              const slug = createProjectSlug(selectedProject);
+              navigate(`/projects/${slug}/kanban`);
+            }
+          }}
+        />
+      ) : (
+        <>
+          {selectedProject && currentView === 'kanban' && (
+            <KanbanBoard
+              tasks={tasks}
+              statusValues={statusValues}
+              priorityValues={priorityValues}
+              onViewTask={(task: Task) => {
+                if (selectedProject) {
+                  const slug = createProjectSlug(selectedProject);
+                  navigate(`/projects/${slug}/tasks/${task.id}`);
+                }
+              }}
+            />
+          )}
+
+          {currentView === 'dashboard' && (
+            <div className="text-center py-12">
+              <BarChart3 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-500">Dashboard Coming Soon</h3>
+              <p className="text-gray-400">Analytics and project insights will be available here.</p>
+            </div>
+          )}
+        </>
+      )}
 
       {showTaskModal && (
         <TaskModal
@@ -237,6 +241,6 @@ export default function App() {
           }}
         />
       )}
-    </div>
+    </>
   );
 }
