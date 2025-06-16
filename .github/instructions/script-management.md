@@ -6,11 +6,13 @@ This document establishes guidelines for managing scripts in the AI Development 
 ## Current Script Inventory
 
 ### Active Scripts (DO NOT DUPLICATE)
-- `scripts/project-manager.sh` - **PRIMARY** project management CLI
+- `scripts/project-manager.sh` - **PRIMARY** project management CLI (see `project-management.md`)
 - `scripts/security-monitor.sh` - **PRIMARY** security monitoring and task creation
 - `ai-pm/scripts/setup.sh` - AI PM service setup
 - `ai-pm/scripts/backup.sh` - Database backup utility  
 - `ai-pm/scripts/restore.sh` - Database restore utility
+
+**Before creating any new script, check this inventory and consider enhancing existing scripts.**
 
 ### Script Locations
 - **Root `/scripts/`** - Global utility scripts used across the entire monorepo
@@ -30,9 +32,11 @@ This document establishes guidelines for managing scripts in the AI Development 
 
 ### 3. Before Adding New Scripts
 1. **Check existing scripts** - Does this functionality already exist?
-2. **Consider enhancement** - Can we improve an existing script instead?
-3. **Document purpose** - Add clear comments explaining what the script does
-4. **Single responsibility** - Each script should have one clear purpose
+2. **Review current inventory** - See the Active Scripts list above
+3. **Consider enhancement** - Can we improve an existing script instead?
+4. **Follow coding standards** - See `coding-standards.md` for quality requirements
+5. **Document purpose** - Add clear comments explaining what the script does
+6. **Single responsibility** - Each script should have one clear purpose
 
 ### 4. Script Organization
 ```
@@ -108,7 +112,27 @@ scripts/project-manager-simple.sh
 - **Consolidate similar functionality** before it becomes bloat
 - **Update this document** when adding new categories of scripts
 
+## Integration with Development Workflow
+
+### Task Tracking for Script Changes
+When modifying or creating scripts, create a task in the project management system:
+
+**For task creation commands, see `project-management.md`**
+
+### Security Considerations
+Scripts often handle sensitive data and system operations.
+
+**For security requirements, see `coding-standards.md` Security Standards section**
+
+### Testing Script Changes
+All scripts should be tested before deployment.
+
+**For testing requirements, see `testing.md`**
+
 ## Related Documentation
-- **Environment Setup**: See [environment-setup.md](environment-setup.md) for standardized environment configuration
-- **Repository Structure**: See [../../REPOSITORY_STRUCTURE.md](../../REPOSITORY_STRUCTURE.md) for overall organization
-- **Contributing Guidelines**: See [../../CONTRIBUTING.md](../../CONTRIBUTING.md) for development practices
+- **Project Management**: See `project-management.md` for task creation and tracking commands
+- **Code Standards**: See `coding-standards.md` for security requirements and quality standards
+- **Testing**: See `testing.md` for script testing requirements
+- **Environment Setup**: See `environment-setup.md` for standardized environment configuration
+- **Repository Structure**: See `../../REPOSITORY_STRUCTURE.md` for overall organization
+- **Contributing Guidelines**: See `../../CONTRIBUTING.md` for development practices

@@ -130,6 +130,10 @@ Development-specific settings:
 
 ## Integration with Tools
 
+### Project Management System
+- See `project-management.md` for service startup and management commands
+- Environment variables configure database connections and API endpoints
+
 ### Scripts
 - Main CLI script: `scripts/project-manager.sh`
 - Sources environment variables automatically

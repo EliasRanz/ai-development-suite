@@ -1,22 +1,15 @@
-# AI Agent Security Instructions
+# Sensitive Data Handling for AI Agents
 
-This file contains instructions for AI agents working on this project regarding sensitive data handling.
+## Critical Security Rule
+**NEVER commit sensitive data to version control**
 
-## 🔐 Environment Configuration
+## Environment Configuration
+**See `environment-setup.md` for detailed setup instructions**
 
-### For Local Development:
-1. Copy `.env.template` to `.env` 
-2. Update all placeholder values with secure credentials
-3. **NEVER commit the `.env` file**
-
-### For AI Agent Sessions:
-1. Use `.env.local.template` as a guide for configuration
-2. Create a local `.env.local` file with your specific settings
-3. Reference this file in your session for:
-   - Database passwords
-   - API tokens
-   - File paths
-   - Service URLs
+### Quick Reference
+- Use `.env.template` as the source of truth
+- Copy to `.env` and customize with secure values
+- **NEVER commit `.env` files**
 
 ## 🚨 Security Rules
 
@@ -54,7 +47,7 @@ cp .env.local.template .env.session
 cd ai-pm && ./scripts/setup.sh
 
 # Use CLI (requires services running)
-./ai-pm/scripts/project-manager.sh list-tasks
+./scripts/project-manager.sh list-tasks
 
 # Build AI Studio
 cd ai-studio && make build

@@ -1,9 +1,32 @@
-Comprehensive input validation for all user inputs and external data.
+# Security Instructions for AI Agents
 
-Path traversal protection - reject paths containing "..".
+## Security-First Development Policy
 
-Never commit credentials - use .env files for secrets (already in .gitignore).
+### Primary Rule
+**ALL code MUST follow security standards defined in `coding-standards.md`**
 
-WSL `777` permissions are normal DRVFS behavior, not a security risk.
+### Critical Security Requirements
+1. **Input Validation**: Use centralized validation utilities (see coding-standards.md)
+2. **No Hardcoded Secrets**: Use .env files, never commit credentials
+3. **Path Security**: Prevent traversal attacks using proper validation
+4. **SQL Injection Prevention**: Parameterized queries only
+5. **Error Handling**: No sensitive information in error messages
 
-Verify dependencies with `go mod verify` and `npm audit`.
+### Environment-Specific Notes
+- **Production**: Use proper file permissions and security headers
+
+### Dependency Security
+```bash
+# ALWAYS verify dependencies before deployment
+go mod verify
+npm audit
+```
+
+### Security Review Checklist
+- [ ] All inputs validated using utility functions
+- [ ] No hardcoded credentials or secrets
+- [ ] Parameterized database queries
+- [ ] Error messages don't leak sensitive data
+- [ ] Security headers implemented for HTTP responses
+
+**For detailed implementation examples, see `coding-standards.md` Security Standards section.**

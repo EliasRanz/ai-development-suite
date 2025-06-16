@@ -1,9 +1,30 @@
-Go/Wails backend with React TypeScript frontend.
+# Architecture Instructions for AI Agents
 
-Clean Architecture layers: Frontend → Application → Domain → Infrastructure.
+## Technology Stack
+- **Backend**: Go/Wails with React TypeScript frontend
+- **Architecture**: Clean Architecture pattern
+- **Target**: 4x performance improvement over Python implementation
 
-Universal AI tool launcher supporting ComfyUI, Automatic1111, Ollama, etc.
+## Layer Structure (MANDATORY)
+```
+Frontend (React/TS) 
+    ↓
+Application Layer (Use cases, services)
+    ↓  
+Domain Layer (Business logic, entities)
+    ↓
+Infrastructure Layer (Database, external APIs)
+```
 
-Tool-specific adapters with common interfaces for extensibility.
+## Implementation Rules
+1. **Desktop application** - Cross-platform desktop application using Wails
+2. **Model-agnostic design** - Common interfaces for different AI model types
+3. **Feature flags** - Use for work-in-progress functionality
+4. **Clean separation** - Each layer has single responsibility
 
-Feature flags for work-in-progress functionality.
+## AI Agent Guidelines
+- FOLLOW Clean Architecture patterns strictly
+- CREATE adapters for new AI model types
+- USE interfaces for extensibility between different models
+- IMPLEMENT feature flags for experimental features
+- DESIGN for cross-platform desktop deployment

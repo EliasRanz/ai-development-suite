@@ -24,7 +24,7 @@ Minimal, essential documentation focused on AI-driven development.
 ### AI Agent Guidelines
 Keep `.github/instructions/` updated as problems are encountered - any AI agent should start where the previous one left off.
 
-Check AI Project Manager (formerly Plane) for current tasks and status at session start.
+Check AI Project Manager for current tasks and status at session start.
 
 Use AI Project Manager for task tracking and project status.
 
