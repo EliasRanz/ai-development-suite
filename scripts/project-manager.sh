@@ -72,10 +72,23 @@ api_call() {
     debug "API call: $method $url"
     [[ -n "$data" ]] && debug "Data: $data"
     
-    local response
-    if response=$(curl "${curl_args[@]}" "$url" 2>/dev/null); then
-        echo "$response"
+    # Use curl to get both response and HTTP status code
+    local temp_file response http_code
+    temp_file=$(mktemp)
+    
+    if http_code=$(curl "${curl_args[@]}" -w "%{http_code}" -o "$temp_file" "$url" 2>/dev/null); then
+        response=$(cat "$temp_file")
+        rm -f "$temp_file"
+        
+        # Check if HTTP status code indicates success (2xx)
+        if [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
+            echo "$response"
+        else
+            error "API call failed with HTTP $http_code: $response"
+            return 1
+        fi
     else
+        rm -f "$temp_file"
         error "API call failed: $method $url"
         return 1
     fi
@@ -143,20 +156,59 @@ cmd_list_tasks() {
     if ! response=$(api_call "GET" "$endpoint"); then
         return 1
     fi
-    
-    # Simple JSON array parsing
+     # Simple JSON array parsing
     if [[ "$response" == "[]" ]]; then
         info "No tasks found"
         return 0
     fi
+
+    # Calculate optimal column widths
+    local terminal_width
+    terminal_width=$(tput cols 2>/dev/null || echo "80")
     
-    printf "%-4s %-30s %-12s %s\n" "ID" "TITLE" "STATUS" "PRIORITY"
-    echo "────────────────────────────────────────────────────────────"
+    # Parse all tasks first to determine max title length
+    local max_title_length=5  # minimum for "TITLE" header
+    local task_data=()
     
-    # Use jq to parse JSON array and format each task
-    echo "$response" | jq -r '.[] | "\(.id // "")\t\(.title // "")\t\(.status // "")\t\(.priority // "")"' | \
-    while IFS=$'\t' read -r id title status priority; do
-        printf "%-4s %-30s %-12s %s\n" "$id" "${title:0:30}" "$status" "$priority"
+    # First pass: collect data and find max title length
+    while read -r line; do
+        local id title status priority
+        # Parse the tab-separated values from jq output
+        IFS=$'\t' read -r id title status priority <<< "$line"
+        
+        task_data+=("$id|$title|$status|$priority")
+        local title_length=${#title}
+        if [[ $title_length -gt $max_title_length ]]; then
+            max_title_length=$title_length
+        fi
+    done < <(echo "$response" | jq -r '.[] | [.id // "", .title // "", .status // "", .priority // ""] | @tsv')
+    
+    # Calculate column widths (ID: 4, STATUS: 12, PRIORITY: 8, remainder for TITLE)
+    local id_width=4
+    local status_width=12
+    local priority_width=8
+    local available_for_title=$((terminal_width - id_width - status_width - priority_width - 6))  # 6 for spacing
+    
+    # Use smaller of max_title_length or available space, but at least 20 chars
+    local title_width=$max_title_length
+    if [[ $available_for_title -lt $max_title_length ]] && [[ $available_for_title -ge 20 ]]; then
+        title_width=$available_for_title
+    elif [[ $available_for_title -lt 20 ]]; then
+        title_width=20
+    fi
+    
+    # Print header
+    printf "%-${id_width}s %-${title_width}s %-${status_width}s %-${priority_width}s\n" "ID" "TITLE" "STATUS" "PRIORITY"
+    printf '%*s\n' "$((id_width + title_width + status_width + priority_width + 3))" | tr ' ' '─'
+    
+    # Print tasks
+    for task_line in "${task_data[@]}"; do
+        IFS='|' read -r id title status priority <<< "$task_line"
+        # Truncate title if needed
+        if [[ ${#title} -gt $title_width ]]; then
+            title="${title:0:$((title_width - 3))}..."
+        fi
+        printf "%-${id_width}s %-${title_width}s %-${status_width}s %-${priority_width}s\n" "$id" "$title" "$status" "$priority"
     done
 }
 
@@ -199,13 +251,15 @@ cmd_add_task() {
     "title": "$title",
     "description": "$description",
     "priority": "$priority",
-    "status": "pending"
+    "status": "todo"
 }
 EOF
 )
     
-    if api_call "POST" "/tasks" "$json_data" >/dev/null; then
-        success "Task '$title' added successfully"
+    if response=$(api_call "POST" "/tasks" "$json_data"); then
+        local task_id
+        task_id=$(echo "$response" | jq -r '.id')
+        success "Task '$title' added successfully with ID: $task_id"
     else
         error "Failed to add task"
         return 1
@@ -222,9 +276,11 @@ cmd_update_task() {
             -t|--title) title="$2"; shift 2 ;;
             -d|--description) description="$2"; shift 2 ;;
             -h|--help)
+                local valid_statuses
+                valid_statuses=$(get_valid_statuses | tr '\n' '|' | sed 's/|$//' | sed 's/|/, /g')
                 echo "Usage: update-task -i TASK_ID [-s STATUS] [-t TITLE] [-d DESCRIPTION]"
                 echo "  -i, --id           Task ID (required)"
-                echo "  -s, --status       New status (pending|in-progress|done|cancelled)"
+                echo "  -s, --status       New status ($valid_statuses)"
                 echo "  -t, --title        New title"
                 echo "  -d, --description  New description"
                 return 0
@@ -240,10 +296,9 @@ cmd_update_task() {
     
     # Validate status if provided
     if [[ -n "$status" ]]; then
-        case "$status" in
-            pending|in-progress|done|cancelled) ;;
-            *) error "Status must be: pending, in-progress, done, or cancelled"; return 1 ;;
-        esac
+        if ! validate_status "$status"; then
+            return 1
+        fi
     fi
     
     # Build JSON data with only provided fields
@@ -269,13 +324,16 @@ cmd_update_task() {
 
 cmd_delete_task() {
     local task_id=""
+    local reason="Deleted via CLI"
     
     while [[ $# -gt 0 ]]; do
         case $1 in
             -i|--id) task_id="$2"; shift 2 ;;
+            -r|--reason) reason="$2"; shift 2 ;;
             -h|--help)
-                echo "Usage: delete-task -i TASK_ID"
-                echo "  -i, --id    Task ID (required)"
+                echo "Usage: delete-task -i TASK_ID [-r REASON]"
+                echo "  -i, --id       Task ID (required)"
+                echo "  -r, --reason   Deletion reason (default: 'Deleted via CLI')"
                 return 0
                 ;;
             *) error "Unknown option: $1"; return 1 ;;
@@ -287,17 +345,10 @@ cmd_delete_task() {
         return 1
     fi
     
-    if [[ "$INTERACTIVE" == "true" ]]; then
-        warning "This will permanently delete task $task_id"
-        echo "Are you sure? [y/N]"
-        read -r response
-        if [[ ! "$response" =~ ^[Yy]$ ]]; then
-            info "Delete cancelled"
-            return 0
-        fi
-    fi
+    local json_data
+    json_data=$(jq -n --arg reason "$reason" '{reason: $reason}')
     
-    if api_call "DELETE" "/tasks/$task_id" >/dev/null; then
+    if api_call "DELETE" "/tasks/$task_id" "$json_data" >/dev/null; then
         success "Task $task_id deleted successfully"
     else
         error "Failed to delete task"
@@ -531,6 +582,33 @@ cmd_config() {
     show_config
 }
 
+# Fetch valid status values from API
+get_valid_statuses() {
+    local response
+    if response=$(api_call "GET" "/status-values" 2>/dev/null); then
+        echo "$response" | jq -r '.[].key' 2>/dev/null
+    else
+        # Fallback to hardcoded values if API is not available
+        echo -e "todo\nin_progress\nreview\ndone"
+    fi
+}
+
+# Validate status against API values
+validate_status() {
+    local status="$1"
+    local valid_statuses
+    valid_statuses=$(get_valid_statuses)
+    
+    if echo "$valid_statuses" | grep -q "^${status}$"; then
+        return 0
+    else
+        local status_list
+        status_list=$(echo "$valid_statuses" | tr '\n' '|' | sed 's/|$//')
+        error "Status must be one of: ${status_list//|/, }"
+        return 1
+    fi
+}
+
 # Help function
 show_help() {
     echo -e "${BLUE}AI Project Management CLI v3.0 (Simplified)${NC}"
@@ -563,7 +641,7 @@ show_help() {
     echo "For command-specific help: $0 <command> --help"
     echo
     echo "EXAMPLES:"
-    echo "  $0 list-tasks -p 1 -s pending"
+    echo "  $0 list-tasks -p 1 -s todo"
     echo "  $0 add-task -p 1 -t \"Fix bug\" -r high"
     echo "  $0 update-task -i 42 -s done"
     echo "  $0 delete-task -i 42"
