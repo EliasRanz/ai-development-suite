@@ -173,6 +173,72 @@ make ai-pm-start
 make ai-pm-status
 ```
 
+## Developer Onboarding Experience
+
+### 🎯 **Goal**: Get from "git clone" to "ready to develop" in under 10 minutes
+
+Our cross-platform setup script provides a comprehensive, intelligent onboarding experience:
+
+### ✨ **What Makes It Special**
+
+1. **🎛️ Smart Detection**
+   - Automatically detects OS (Linux, WSL2, macOS, Windows)
+   - Chooses optimal installation method for your platform
+   - Checks existing installations to avoid conflicts
+
+2. **🛡️ Safety First**
+   - Interactive confirmation before making changes
+   - `--dry-run` mode to preview what will happen
+   - Generates secure, unique credentials automatically
+   - Never overwrites existing configurations
+
+3. **🧠 Intelligent Error Handling**
+   - Automatic troubleshooting tips when issues arise
+   - Platform-specific solutions for common problems
+   - Verbose mode for debugging complex issues
+
+4. **⚡ Flexibility**
+   - `--skip-tests` for faster repeated runs
+   - `--verbose` for detailed progress tracking
+   - Handles partial setups gracefully
+   - Can be run multiple times safely
+
+### 🚀 **New Developer Journey**
+
+1. **First Run**: `./scripts/setup-dev-environment.sh --dry-run`
+   - See exactly what will be installed
+   - No changes to your system
+   - Builds confidence before proceeding
+
+2. **Full Setup**: `make setup-dev`
+   - Complete environment setup
+   - Secure credential generation
+   - Validation and testing
+
+3. **Start Developing**: `AI_PM_MODE=dev make ai-pm-start`
+   - Jump straight into development
+   - Hot reload and debugging ready
+   - All services configured and tested
+
+### 📋 **Supports All Developer Types**
+
+- **Backend Developers**: Go environment, Air hot reload, database ready
+- **Frontend Developers**: Node.js, npm packages, dev server with HMR
+- **DevOps Engineers**: Docker, Make, all infrastructure automated
+- **New Team Members**: Comprehensive documentation and guided setup
+- **Cross-Platform Teams**: Windows (WSL), macOS, Linux all supported
+
+### 🔧 **Troubleshooting Built-In**
+
+Common issues are detected and resolved automatically:
+- PATH configuration for Go tools
+- Docker resource allocation
+- Port conflicts
+- Package manager issues
+- Network connectivity problems
+
+The setup script gets smarter with each improvement, making onboarding easier for everyone.
+
 ## Script Features
 
 - 🌍 **Cross-platform** - Works on Windows, macOS, and Linux
