@@ -1,12 +1,5 @@
 services:
-  ai-pm-cache:
-    image: redis:7.2-alpine
-    platform: linux/amd64
-    restart: unless-stopped
-    volumes:
-      - ./data/redis:/data
-    container_name: ai-tools-pm-cache
-
+  # Shared infrastructure services (always needed)
   ai-pm-database:
     image: postgres:15
     platform: linux/amd64
@@ -21,22 +14,9 @@ services:
     ports:
       - "5432:5432"
 
-  ai-pm-storage:
-    image: minio/minio
-    platform: linux/amd64
-    restart: unless-stopped
-    command: server /export --console-address ":9090"
-    environment:
-      MINIO_ROOT_USER: ${AI_PM_STORAGE_USER:-aipm}
-      MINIO_ROOT_PASSWORD: ${AI_PM_STORAGE_PASSWORD:-aipm123}
-    volumes:
-      - ./data/minio:/export
-    container_name: ai-tools-pm-storage
-    ports:
-      - "9000:9000"
-      - "9090:9090"
-
+  # Production services
   ai-pm-api:
+    profiles: ["production", "prod"]
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -52,11 +32,10 @@ services:
       - "8000:8000"
     depends_on:
       - ai-pm-database
-      - ai-pm-cache
-      - ai-pm-storage
     container_name: ai-tools-pm-api
 
   ai-pm-ui:
+    profiles: ["production", "prod"]
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -64,9 +43,58 @@ services:
     environment:
       VITE_API_BASE_URL: http://localhost:8000
     ports:
-      - "3001:80"
+      - "3000:80"
     depends_on:
       - ai-pm-api
     container_name: ai-tools-pm-ui
 
-# Volumes removed - using local bind mounts for better persistence and backup control
+  # Development services (with hot reload)
+  ai-pm-api-dev:
+    profiles: ["development", "dev"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    environment:
+      AI_PM_DB_HOST: ai-pm-database
+      AI_PM_DB_PORT: "5432"
+      AI_PM_DB_USER: ${AI_PM_DB_USER:-aipm}
+      AI_PM_DB_PASSWORD: ${AI_PM_DB_PASSWORD:-aipm123}
+      AI_PM_DB_NAME: ${AI_PM_DB_NAME:-ai_project_manager}
+      PORT: "8000"
+      AIR_ENABLED: "true"
+      ENVIRONMENT: "development"
+      APP_VERSION: "dev-hotreload"
+      BUILD_TIME: "dynamic"
+    ports:
+      - "8001:8000"
+    depends_on:
+      - ai-pm-database
+    container_name: ai-tools-pm-api-dev
+    volumes:
+      # Mount source code for hot reload
+      - ./backend:/app:delegated
+      - /app/tmp  # Air build cache directory
+
+  ai-pm-ui-dev:
+    profiles: ["development", "dev"]
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: http://localhost:8001/api
+      CHOKIDAR_USEPOLLING: "true"  # For Docker file watching
+    ports:
+      - "3002:3000"
+    depends_on:
+      - ai-pm-api-dev
+    container_name: ai-tools-pm-ui-dev
+    volumes:
+      # Mount source code for HMR
+      - ./frontend/src:/app/src:delegated
+      - ./frontend/public:/app/public:delegated
+      - ./frontend/package.json:/app/package.json:delegated
+      - ./frontend/vite.config.ts:/app/vite.config.ts:delegated
+      - ./frontend/tsconfig.json:/app/tsconfig.json:delegated
+      - ./frontend/index.html:/app/index.html:delegated

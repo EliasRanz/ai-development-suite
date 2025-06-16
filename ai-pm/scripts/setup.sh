@@ -22,7 +22,6 @@ if [ ! -f .env ]; then
     
     # Generate secure random passwords
     AI_PM_DB_PASSWORD=$(openssl rand -base64 20 | tr -d "=+/" | cut -c1-25)
-    AI_PM_STORAGE_PASSWORD=$(openssl rand -base64 20 | tr -d "=+/" | cut -c1-25)
     AI_PM_SECRET_KEY=$(openssl rand -base64 32)
     
     cat > .env << EOF
@@ -39,8 +38,6 @@ AI_PM_PROJECT_ID=your-project-id
 AI_PM_DB_USER=aipm
 AI_PM_DB_PASSWORD=${AI_PM_DB_PASSWORD}
 AI_PM_DB_NAME=ai_project_manager
-AI_PM_STORAGE_USER=aipm
-AI_PM_STORAGE_PASSWORD=${AI_PM_STORAGE_PASSWORD}
 AI_PM_SECRET_KEY=${AI_PM_SECRET_KEY}
 
 # Development
