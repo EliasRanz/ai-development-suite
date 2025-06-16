@@ -24,14 +24,6 @@ Desktop application for managing ComfyUI workflows.
 ### 🖥️ **General Frontend** (`frontend/`)
 Wails-based frontend framework for the broader AI tools ecosystem.
 
-### 🔧 **Shared Infrastructure** (`shared/`)
-Common utilities and configurations used across projects.
-
-**Components:**
-- `shared/scripts/` - Cross-project utilities
-- `shared/configs/` - Shared configurations
-- `shared/docs/` - General documentation
-
 ## 🚀 Distribution Strategy
 
 ### Individual Project Releases

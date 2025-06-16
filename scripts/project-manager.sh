@@ -1,205 +1,213 @@
 #!/bin/bash
-# AI Project Management CLI (Enhanced with getopts)
-# Modern CLI with flag support, colors, and improved user experience
+
+# Simplified AI Project Management CLI
+# Focused on core functionality with clean, maintainable code
 
 set -euo pipefail
 
-# API configuration
-API_BASE_URL="http://localhost:8001/api"
+# Script directory and environment helper
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Color codes
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+# Source simplified environment helper
+# shellcheck source=./env-helper.sh
+source "$SCRIPT_DIR/env-helper.sh"
 
-# Helper functions
-print_success() { echo -e "${GREEN}✓${NC} $1"; }
-print_error() { echo -e "${RED}✗${NC} $1" >&2; }
-print_warning() { echo -e "${YELLOW}⚠${NC} $1"; }
-print_info() { echo -e "${BLUE}ℹ${NC} $1"; }
+# Colors for output
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[1;33m'
+readonly BLUE='\033[0;34m'
+readonly NC='\033[0m' # No Color
 
-# Formatting helper functions
-format_table_header() {
-    local -a columns=("$@")
-    local widths=(4 30 35 12 8)  # Default column widths
+# Global options
+ENVIRONMENT=""
+API_BASE_URL=""
+INTERACTIVE=true
+VERBOSE=false
+
+# Output functions
+error() { echo -e "${RED}✗${NC} $*" >&2; }
+success() { echo -e "${GREEN}✓${NC} $*"; }
+warning() { echo -e "${YELLOW}⚠${NC} $*"; }
+info() { echo -e "${BLUE}ℹ${NC} $*"; }
+debug() { [[ "$VERBOSE" == "true" ]] && echo -e "${BLUE}DEBUG:${NC} $*" >&2 || true; }
+
+# Initialize environment
+init_env() {
+    if [[ -n "$API_BASE_URL" ]]; then
+        debug "Using explicit API URL: $API_BASE_URL"
+        return 0
+    fi
     
-    # Print header
-    printf "%-${widths[0]}s %-${widths[1]}s %-${widths[2]}s %-${widths[3]}s %-${widths[4]}s\n" "${columns[@]}"
+    local env_info
+    if ! env_info=$(get_env_info "$ENVIRONMENT" "$INTERACTIVE"); then
+        error "Failed to initialize environment"
+        return 1
+    fi
     
-    # Print separator
-    printf "%-${widths[0]}s %-${widths[1]}s %-${widths[2]}s %-${widths[3]}s %-${widths[4]}s\n" \
-        "──" "──────────────────────────────" "───────────────────────────────────" "────────────" "────────"
-}
-
-format_table_row() {
-    local id="$1" col1="$2" col2="$3" col3="$4" col4="$5"
-    local widths=(4 30 35 12 8)
+    local env_type="${env_info%%:*}"
+    API_BASE_URL="${env_info#*:}"
     
-    printf "%-${widths[0]}s %-${widths[1]}s %-${widths[2]}s %-${widths[3]}s %-${widths[4]}s\n" \
-        "$id" "${col1:0:29}" "${col2:0:34}" "$col3" "$col4"
+    debug "Initialized environment: $env_type -> $API_BASE_URL"
 }
 
-format_task_summary() {
-    local response="$1"
-    echo
-    echo -e "${BLUE}Task Summary:${NC}"
-    echo "$response" | jq -r '.[] | 
-        "
-\u001b[0;33m► Task #\(.id): \(.title)\u001b[0m
-  Project: \(.project_name // "Unknown")
-  Status: \(.status) | Priority: \(.priority)
-  Description: \(.description // "No description provided")
-  Created: \(.created_at | split("T")[0]) | Updated: \(.updated_at | split("T")[0])" + 
-  (if .notes and (.notes | length > 0) then
-    "\n  Notes:\n" + (.notes | map("    • " + .content + " (" + (.created_at | split("T")[0]) + ")") | join("\n"))
-  else "" end) + "
-  "'
-}
-
-format_project_summary() {
-    local response="$1"
-    echo
-    echo -e "${BLUE}Project Summary:${NC}"
-    echo "$response" | jq -r '.[] | 
-        "
-\u001b[0;32m► Project #\(.id): \(.name)\u001b[0m
-  Status: \(.status)
-  Description: \(.description // "No description provided")
-  Created: \(.created_at | split("T")[0]) | Updated: \(.updated_at | split("T")[0])
-  "'
-}
-
-format_tasks_table() {
-    local response="$1"
-    format_table_header "ID" "PROJECT" "TITLE" "STATUS" "PRIORITY"
-    echo "$response" | jq -r '.[] | "\(.id)\t\(.project_name // "Unknown")\t\(.title)\t\(.status)\t\(.priority)"' |
-    while IFS=$'\t' read -r id project title status priority; do
-        format_table_row "$id" "$project" "$title" "$status" "$priority"
-    done
-}
-
-format_projects_table() {
-    local response="$1"
-    format_table_header "ID" "NAME" "DESCRIPTION" "STATUS" "UPDATED"
-    echo "$response" | jq -r '.[] | "\(.id)\t\(.name)\t\(.description // "")\t\(.status)\t\(.updated_at | split("T")[0])"' |
-    while IFS=$'\t' read -r id name description status updated; do
-        format_table_row "$id" "$name" "$description" "$status" "$updated"
-    done
-}
-
-# Data validation helpers
-is_empty_response() {
-    local response="$1"
-    [[ "$response" == "[]" ]] || [[ "$response" == "null" ]] || [[ -z "$response" ]]
-}
-
-# API call function
+# Make API call with error handling
 api_call() {
-    local method="$1" endpoint="$2" data="${3:-}"
-    case "$method" in
-        GET) curl -s "$API_BASE_URL$endpoint" ;;
-        POST|PUT) curl -s -X "$method" "$API_BASE_URL$endpoint" \
-                    -H "Content-Type: application/json" -d "$data" ;;
-        DELETE) curl -s -X DELETE "$API_BASE_URL$endpoint" ;;
-    esac
-}
-
-# Check dependencies
-check_deps() {
-    for cmd in curl jq; do
-        if ! command -v "$cmd" >/dev/null 2>&1; then
-            print_error "$cmd is required but not installed"
-            exit 1
-        fi
-    done
+    local method="$1"
+    local endpoint="$2"
+    local data="${3:-}"
     
-    if ! curl -s "$API_BASE_URL/health" >/dev/null 2>&1; then
-        print_error "API not available at $API_BASE_URL"
-        print_info "Start services with: make ai-pm-start"
-        exit 1
+    local url="${API_BASE_URL}${endpoint}"
+    local curl_args=("-s" "-X" "$method")
+    
+    # Add authentication if configured
+    load_env_config
+    [[ -n "${AI_PM_API_TOKEN:-}" ]] && curl_args+=("-H" "Authorization: Bearer $AI_PM_API_TOKEN")
+    
+    # Add data for POST/PUT requests
+    if [[ -n "$data" ]]; then
+        curl_args+=("-H" "Content-Type: application/json" "-d" "$data")
+    fi
+    
+    debug "API call: $method $url"
+    [[ -n "$data" ]] && debug "Data: $data"
+    
+    local response
+    if response=$(curl "${curl_args[@]}" "$url" 2>/dev/null); then
+        echo "$response"
+    else
+        error "API call failed: $method $url"
+        return 1
     fi
 }
 
-# Command functions
-cmd_list_tasks() {
-    local project_id="" verbose=false
+# Check required dependencies
+check_deps() {
+    command_exists curl || { error "curl is required but not installed"; return 1; }
+    command_exists jq || { error "jq is required but not installed"; return 1; }
     
-    while getopts ":p:vh" opt; do
-        case $opt in
-            p) project_id="$OPTARG" ;;
-            v) verbose=true ;;
-            h) cat <<EOF
-Usage: $0 list-tasks [-p PROJECT_ID] [-v] [-h]
-  -p PROJECT_ID  Filter by project ID
-  -v             Verbose output (detailed summary format with descriptions)
-  -h             Show help
+    # Test API connectivity
+    if ! test_api "$API_BASE_URL" 5; then
+        error "API is not responding at $API_BASE_URL"
+        return 1
+    fi
+}
 
-Regular output: Clean table format with ID, Project, Title, Status, Priority
-Verbose output: Detailed summary format with full descriptions and timestamps
-EOF
-               return ;;
-            \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
+# Format task output
+format_task() {
+    local task="$1"
+    
+    # Use jq to properly parse JSON
+    local id title status priority
+    id=$(echo "$task" | jq -r '.id // ""')
+    title=$(echo "$task" | jq -r '.title // ""')
+    status=$(echo "$task" | jq -r '.status // ""')
+    priority=$(echo "$task" | jq -r '.priority // ""')
+    
+    printf "%-4s %-30s %-12s %s\n" "$id" "${title:0:30}" "$status" "$priority"
+}
+
+# Command implementations
+cmd_list_tasks() {
+    local project_id=""
+    local status=""
+    local verbose_output=false
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -p|--project) project_id="$2"; shift 2 ;;
+            -s|--status) status="$2"; shift 2 ;;
+            -v|--verbose) verbose_output=true; shift ;;
+            -h|--help)
+                echo "Usage: list-tasks [-p PROJECT_ID] [-s STATUS] [-v]"
+                echo "  -p, --project    Filter by project ID"
+                echo "  -s, --status     Filter by status"
+                echo "  -v, --verbose    Show additional details"
+                return 0
+                ;;
+            *) error "Unknown option: $1"; return 1 ;;
         esac
     done
     
     local endpoint="/tasks"
-    [[ -n "$project_id" ]] && endpoint="/tasks?project_id=$project_id"
+    local params=()
     
-    local response=$(api_call GET "$endpoint")
-    if is_empty_response "$response"; then
-        print_warning "No tasks found"
-        return
+    [[ -n "$project_id" ]] && params+=("project_id=$project_id")
+    [[ -n "$status" ]] && params+=("status=$status")
+    
+    if [[ ${#params[@]} -gt 0 ]]; then
+        endpoint+="?$(IFS='&'; echo "${params[*]}")"
     fi
     
-    if [[ "$verbose" == true ]]; then
-        format_task_summary "$response"
-    else
-        format_tasks_table "$response"
+    local response
+    if ! response=$(api_call "GET" "$endpoint"); then
+        return 1
     fi
+    
+    # Simple JSON array parsing
+    if [[ "$response" == "[]" ]]; then
+        info "No tasks found"
+        return 0
+    fi
+    
+    printf "%-4s %-30s %-12s %s\n" "ID" "TITLE" "STATUS" "PRIORITY"
+    echo "────────────────────────────────────────────────────────────"
+    
+    # Use jq to parse JSON array and format each task
+    echo "$response" | jq -r '.[] | "\(.id // "")\t\(.title // "")\t\(.status // "")\t\(.priority // "")"' | \
+    while IFS=$'\t' read -r id title status priority; do
+        printf "%-4s %-30s %-12s %s\n" "$id" "${title:0:30}" "$status" "$priority"
+    done
 }
 
 cmd_add_task() {
     local project_id="" title="" description="" priority="medium"
     
-    while getopts ":p:t:d:r:h" opt; do
-        case $opt in
-            p) project_id="$OPTARG" ;;
-            t) title="$OPTARG" ;;
-            d) description="$OPTARG" ;;
-            r) priority="$OPTARG" ;;
-            h) cat <<EOF
-Usage: $0 add-task -p PROJECT_ID -t TITLE [-d DESCRIPTION] [-r PRIORITY] [-h]
-  -p PROJECT_ID  Project ID (required)
-  -t TITLE       Task title (required)
-  -d DESCRIPTION Task description
-  -r PRIORITY    Priority (low|medium|high|urgent)
-  -h             Show help
-EOF
-               return ;;
-            \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
-            :) print_error "Option -$OPTARG requires an argument"; return 1 ;;
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -p|--project) project_id="$2"; shift 2 ;;
+            -t|--title) title="$2"; shift 2 ;;
+            -d|--description) description="$2"; shift 2 ;;
+            -r|--priority) priority="$2"; shift 2 ;;
+            -h|--help)
+                echo "Usage: add-task -p PROJECT_ID -t TITLE [-d DESCRIPTION] [-r PRIORITY]"
+                echo "  -p, --project      Project ID (required)"
+                echo "  -t, --title        Task title (required)"
+                echo "  -d, --description  Task description"
+                echo "  -r, --priority     Priority (low|medium|high, default: medium)"
+                return 0
+                ;;
+            *) error "Unknown option: $1"; return 1 ;;
         esac
     done
     
     if [[ -z "$project_id" || -z "$title" ]]; then
-        print_error "Project ID and title are required"
+        error "Project ID and title are required"
         return 1
     fi
     
-    local data=$(jq -n \
-        --arg pid "$project_id" \
-        --arg title "$title" \
-        --arg desc "$description" \
-        --arg priority "$priority" \
-        '{project_id: ($pid|tonumber), title: $title, description: $desc, priority: $priority}')
+    # Validate priority
+    case "$priority" in
+        low|medium|high) ;;
+        *) error "Priority must be: low, medium, or high"; return 1 ;;
+    esac
     
-    local response=$(api_call POST "/tasks" "$data")
-    if echo "$response" | jq -e '.id' >/dev/null; then
-        print_success "Task created successfully"
+    local json_data
+    json_data=$(cat <<EOF
+{
+    "project_id": $project_id,
+    "title": "$title",
+    "description": "$description",
+    "priority": "$priority",
+    "status": "pending"
+}
+EOF
+)
+    
+    if api_call "POST" "/tasks" "$json_data" >/dev/null; then
+        success "Task '$title' added successfully"
     else
-        print_error "Failed to create task: $response"
+        error "Failed to add task"
         return 1
     fi
 }
@@ -207,59 +215,54 @@ EOF
 cmd_update_task() {
     local task_id="" status="" title="" description=""
     
-    while getopts ":i:s:t:d:h" opt; do
-        case $opt in
-            i) task_id="$OPTARG" ;;
-            s) status="$OPTARG" ;;
-            t) title="$OPTARG" ;;
-            d) description="$OPTARG" ;;
-            h) cat <<EOF
-Usage: $0 update-task -i TASK_ID [-s STATUS] [-t TITLE] [-d DESCRIPTION] [-h]
-  -i TASK_ID      Task ID (required)
-  -s STATUS       New status (todo|in_progress|review|done)
-  -t TITLE        New title
-  -d DESCRIPTION  New description
-  -h              Show help
-EOF
-               return ;;
-            \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
-            :) print_error "Option -$OPTARG requires an argument"; return 1 ;;
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -i|--id) task_id="$2"; shift 2 ;;
+            -s|--status) status="$2"; shift 2 ;;
+            -t|--title) title="$2"; shift 2 ;;
+            -d|--description) description="$2"; shift 2 ;;
+            -h|--help)
+                echo "Usage: update-task -i TASK_ID [-s STATUS] [-t TITLE] [-d DESCRIPTION]"
+                echo "  -i, --id           Task ID (required)"
+                echo "  -s, --status       New status (pending|in-progress|done|cancelled)"
+                echo "  -t, --title        New title"
+                echo "  -d, --description  New description"
+                return 0
+                ;;
+            *) error "Unknown option: $1"; return 1 ;;
         esac
     done
     
     if [[ -z "$task_id" ]]; then
-        print_error "Task ID is required"
+        error "Task ID is required"
         return 1
     fi
     
-    if [[ -z "$status" && -z "$title" && -z "$description" ]]; then
-        print_error "At least one field to update is required (status, title, or description)"
-        return 1
-    fi
-    
-    # Build JSON data with only the fields that were provided
-    local data="{}"
+    # Validate status if provided
     if [[ -n "$status" ]]; then
-        data=$(echo "$data" | jq --arg status "$status" '. + {status: $status}')
-    fi
-    if [[ -n "$title" ]]; then
-        data=$(echo "$data" | jq --arg title "$title" '. + {title: $title}')
-    fi
-    if [[ -n "$description" ]]; then
-        data=$(echo "$data" | jq --arg description "$description" '. + {description: $description}')
+        case "$status" in
+            pending|in-progress|done|cancelled) ;;
+            *) error "Status must be: pending, in-progress, done, or cancelled"; return 1 ;;
+        esac
     fi
     
-    local response=$(api_call PUT "/tasks/$task_id" "$data")
+    # Build JSON data with only provided fields
+    local json_parts=()
+    [[ -n "$status" ]] && json_parts+=("\"status\": \"$status\"")
+    [[ -n "$title" ]] && json_parts+=("\"title\": \"$title\"")
+    [[ -n "$description" ]] && json_parts+=("\"description\": \"$description\"")
     
-    if echo "$response" | jq -e '.id' >/dev/null; then
-        local updated_fields=""
-        [[ -n "$status" ]] && updated_fields="${updated_fields}status to '$status', "
-        [[ -n "$title" ]] && updated_fields="${updated_fields}title to '$title', "
-        [[ -n "$description" ]] && updated_fields="${updated_fields}description, "
-        updated_fields=${updated_fields%, }  # Remove trailing comma and space
-        print_success "Task $task_id updated: $updated_fields"
+    if [[ ${#json_parts[@]} -eq 0 ]]; then
+        error "At least one field to update is required"
+        return 1
+    fi
+    
+    local json_data="{$(IFS=','; echo "${json_parts[*]}")}"
+    
+    if api_call "PUT" "/tasks/$task_id" "$json_data" >/dev/null; then
+        success "Task $task_id updated successfully"
     else
-        print_error "Failed to update task: $response"
+        error "Failed to update task"
         return 1
     fi
 }
@@ -267,81 +270,103 @@ EOF
 cmd_delete_task() {
     local task_id=""
     
-    while getopts ":i:h" opt; do
-        case $opt in
-            i) task_id="$OPTARG" ;;
-            h) cat <<EOF
-Usage: $0 delete-task -i TASK_ID [-h]
-  -i TASK_ID  Task ID to delete (required)
-  -h          Show help
-EOF
-               return ;;
-            \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
-            :) print_error "Option -$OPTARG requires an argument"; return 1 ;;
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -i|--id) task_id="$2"; shift 2 ;;
+            -h|--help)
+                echo "Usage: delete-task -i TASK_ID"
+                echo "  -i, --id    Task ID (required)"
+                return 0
+                ;;
+            *) error "Unknown option: $1"; return 1 ;;
         esac
     done
     
     if [[ -z "$task_id" ]]; then
-        print_error "Task ID is required"
+        error "Task ID is required"
         return 1
     fi
     
-    # Get task details first for confirmation
-    local task_info=$(api_call GET "/tasks/$task_id")
-    if ! echo "$task_info" | jq -e '.id' >/dev/null; then
-        print_error "Task $task_id not found"
-        return 1
+    if [[ "$INTERACTIVE" == "true" ]]; then
+        warning "This will permanently delete task $task_id"
+        echo "Are you sure? [y/N]"
+        read -r response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            info "Delete cancelled"
+            return 0
+        fi
     fi
     
-    local title=$(echo "$task_info" | jq -r '.title // "Unknown"')
-    print_warning "Deleting task $task_id: $title"
-    
-    local response=$(api_call DELETE "/tasks/$task_id")
-    
-    if [[ "$response" == "" ]] || echo "$response" | jq -e '.message' >/dev/null 2>&1; then
-        print_success "Task $task_id deleted successfully"
+    if api_call "DELETE" "/tasks/$task_id" >/dev/null; then
+        success "Task $task_id deleted successfully"
     else
-        print_error "Failed to delete task: $response"
+        error "Failed to delete task"
         return 1
     fi
 }
 
-# Note management commands (ready for when API supports notes)
+cmd_list_projects() {
+    local response
+    if ! response=$(api_call "GET" "/projects"); then
+        return 1
+    fi
+    
+    if [[ "$response" == "[]" ]]; then
+        info "No projects found"
+        return 0
+    fi
+    
+    printf "%-4s %-30s %s\n" "ID" "NAME" "DESCRIPTION"
+    echo "────────────────────────────────────────────────────────────"
+    
+    # Use jq to parse JSON array and format each project
+    echo "$response" | jq -r '.[] | "\(.id // "")\t\(.name // "")\t\(.description // "")"' | \
+    while IFS=$'\t' read -r id name description; do
+        printf "%-4s %-30s %s\n" "$id" "${name:0:30}" "${description:0:50}"
+    done
+}
+
+cmd_health() {
+    if test_api "$API_BASE_URL"; then
+        success "API is healthy at $API_BASE_URL"
+    else
+        error "API health check failed"
+        return 1
+    fi
+}
 
 cmd_add_note() {
     local task_id="" content=""
     
-    while getopts ":t:c:h" opt; do
-        case $opt in
-            t) task_id="$OPTARG" ;;
-            c) content="$OPTARG" ;;
-            h) cat <<EOF
-Usage: $0 add-note -t TASK_ID -c CONTENT [-h]
-  -t TASK_ID     Task ID to add note to (required)
-  -c CONTENT     Note content (required)
-  -h             Show help
-EOF
-               return ;;
-            \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
-            :) print_error "Option -$OPTARG requires an argument"; return 1 ;;
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -t|--task) task_id="$2"; shift 2 ;;
+            -c|--content) content="$2"; shift 2 ;;
+            -h|--help)
+                echo "Usage: add-note -t TASK_ID -c CONTENT"
+                echo "  -t, --task       Task ID (required)"
+                echo "  -c, --content    Note content (required)"
+                return 0
+                ;;
+            *) error "Unknown option: $1"; return 1 ;;
         esac
     done
     
     if [[ -z "$task_id" || -z "$content" ]]; then
-        print_error "Task ID and content are required"
+        error "Task ID and content are required"
         return 1
     fi
     
-    local data=$(jq -n --arg task_id "$task_id" --arg content "$content" '{task_id: ($task_id | tonumber), content: $content}')
-    local response=$(api_call POST "/notes" "$data")
+    local json_data
+    json_data=$(jq -n --arg task_id "$task_id" --arg content "$content" \
+        '{task_id: ($task_id | tonumber), content: $content}')
     
-    if echo "$response" | jq -e '.id' >/dev/null; then
-        local note_id=$(echo "$response" | jq -r '.id')
-        local created_at=$(echo "$response" | jq -r '.created_at')
-        print_success "Note #$note_id added to task $task_id"
-        print_info "Created: $created_at"
+    if response=$(api_call "POST" "/notes" "$json_data"); then
+        local note_id
+        note_id=$(echo "$response" | jq -r '.id')
+        success "Note #$note_id added to task $task_id"
     else
-        print_error "Failed to add note: $response"
+        error "Failed to add note"
         return 1
     fi
 }
@@ -349,155 +374,117 @@ EOF
 cmd_list_notes() {
     local task_id=""
     
-    while getopts ":t:h" opt; do
-        case $opt in
-            t) task_id="$OPTARG" ;;
-            h) cat <<EOF
-Usage: $0 list-notes -t TASK_ID [-h]
-  -t TASK_ID     Task ID to list notes for (required)
-  -h             Show help
-EOF
-               return ;;
-            \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -t|--task) task_id="$2"; shift 2 ;;
+            -h|--help)
+                echo "Usage: list-notes -t TASK_ID"
+                echo "  -t, --task    Task ID (required)"
+                return 0
+                ;;
+            *) error "Unknown option: $1"; return 1 ;;
         esac
     done
     
     if [[ -z "$task_id" ]]; then
-        print_error "Task ID is required"
+        error "Task ID is required"
         return 1
     fi
     
-    local response=$(api_call GET "/notes?task_id=$task_id")
+    local response
+    if ! response=$(api_call "GET" "/notes?task_id=$task_id"); then
+        return 1
+    fi
     
-    if echo "$response" | jq -e 'type == "array"' >/dev/null; then
-        local count=$(echo "$response" | jq 'length')
-        
-        if [[ $count -eq 0 ]]; then
-            print_info "No notes found for task $task_id"
-            return
+    if [[ "$response" == "[]" ]]; then
+        info "No notes found for task $task_id"
+        return 0
+    fi
+    
+    printf "%-4s %-50s %-16s\n" "ID" "CONTENT" "CREATED"
+    echo "────────────────────────────────────────────────────────────────────"
+    
+    echo "$response" | jq -r '.[] | "\(.id)\t\(.content)\t\(.created_at)"' | while IFS=$'\t' read -r id content created_at; do
+        # Truncate content if too long
+        if [[ ${#content} -gt 48 ]]; then
+            content="${content:0:45}..."
         fi
-        
-        echo
-        # Custom header for notes table
-        printf "%-4s %-52s %-16s\n" "ID" "CONTENT" "CREATED"
-        printf "%.0s─" {1..76}
-        echo
-        
-        echo "$response" | jq -r '.[] | "\(.id)\t\(.content)\t\(.created_at)"' | while IFS=$'\t' read -r id content created_at; do
-            # Truncate content if too long
-            if [[ ${#content} -gt 50 ]]; then
-                content="${content:0:47}..."
-            fi
-            # Format date
-            created_date=$(date -d "$created_at" '+%Y-%m-%d %H:%M' 2>/dev/null || echo "$created_at")
-            printf "%-4s %-52s %-16s\n" "$id" "$content" "$created_date"
-        done
-        echo
-        print_info "Found $count note(s) for task $task_id"
-    else
-        print_error "Failed to retrieve notes: $response"
-        return 1
-    fi
+        # Format date (simple format)
+        created_date="${created_at:0:16}"
+        printf "%-4s %-50s %-16s\n" "$id" "$content" "$created_date"
+    done
 }
 
 cmd_delete_note() {
     local note_id=""
     
-    while getopts ":i:h" opt; do
-        case $opt in
-            i) note_id="$OPTARG" ;;
-            h) cat <<EOF
-Usage: $0 delete-note -i NOTE_ID [-h]
-  -i NOTE_ID     Note ID to delete (required)
-  -h             Show help
-EOF
-               return ;;
-            \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -i|--id) note_id="$2"; shift 2 ;;
+            -h|--help)
+                echo "Usage: delete-note -i NOTE_ID"
+                echo "  -i, --id    Note ID (required)"
+                return 0
+                ;;
+            *) error "Unknown option: $1"; return 1 ;;
         esac
     done
     
     if [[ -z "$note_id" ]]; then
-        print_error "Note ID is required"
+        error "Note ID is required"
         return 1
     fi
     
-    local response=$(api_call DELETE "/notes/$note_id")
+    if [[ "$INTERACTIVE" == "true" ]]; then
+        warning "This will permanently delete note $note_id"
+        echo "Are you sure? [y/N]"
+        read -r response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            info "Delete cancelled"
+            return 0
+        fi
+    fi
     
-    # DELETE returns 204 No Content on success, so check HTTP status
-    if [[ $? -eq 0 ]]; then
-        print_success "Note #$note_id deleted successfully"
+    if api_call "DELETE" "/notes/$note_id" >/dev/null; then
+        success "Note $note_id deleted successfully"
     else
-        print_error "Failed to delete note #$note_id: $response"
+        error "Failed to delete note"
         return 1
-    fi
-}
-
-# Project management commands
-
-cmd_list_projects() {
-    local verbose=false
-    
-    while getopts ":vh" opt; do
-        case $opt in
-            v) verbose=true ;;
-            h) cat <<EOF
-Usage: $0 list-projects [-v] [-h]
-  -v             Verbose output
-  -h             Show help
-EOF
-               return ;;
-            \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
-        esac
-    done
-    
-    local response=$(api_call GET "/projects")
-    if is_empty_response "$response"; then
-        print_warning "No projects found"
-        return
-    fi
-    
-    if [[ "$verbose" == true ]]; then
-        format_project_summary "$response"
-    else
-        format_projects_table "$response"
     fi
 }
 
 cmd_add_project() {
     local name="" description=""
     
-    while getopts ":n:d:h" opt; do
-        case $opt in
-            n) name="$OPTARG" ;;
-            d) description="$OPTARG" ;;
-            h) cat <<EOF
-Usage: $0 add-project -n NAME [-d DESCRIPTION] [-h]
-  -n NAME        Project name (required)
-  -d DESCRIPTION Project description
-  -h             Show help
-EOF
-               return ;;
-            \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
-            :) print_error "Option -$OPTARG requires an argument"; return 1 ;;
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -n|--name) name="$2"; shift 2 ;;
+            -d|--description) description="$2"; shift 2 ;;
+            -h|--help)
+                echo "Usage: add-project -n NAME [-d DESCRIPTION]"
+                echo "  -n, --name         Project name (required)"
+                echo "  -d, --description  Project description"
+                return 0
+                ;;
+            *) error "Unknown option: $1"; return 1 ;;
         esac
     done
     
     if [[ -z "$name" ]]; then
-        print_error "Project name is required"
+        error "Project name is required"
         return 1
     fi
     
-    local data=$(jq -n \
-        --arg name "$name" \
-        --arg desc "$description" \
+    local json_data
+    json_data=$(jq -n --arg name "$name" --arg desc "$description" \
         '{name: $name, description: $desc}')
     
-    local response=$(api_call POST "/projects" "$data")
-    if echo "$response" | jq -e '.id' >/dev/null; then
-        local project_id=$(echo "$response" | jq -r '.id')
-        print_success "Project '$name' created successfully with ID: $project_id"
+    if response=$(api_call "POST" "/projects" "$json_data"); then
+        local project_id
+        project_id=$(echo "$response" | jq -r '.id')
+        success "Project '$name' created successfully with ID: $project_id"
     else
-        print_error "Failed to create project: $response"
+        error "Failed to create project"
         return 1
     fi
 }
@@ -505,144 +492,131 @@ EOF
 cmd_delete_project() {
     local project_id=""
     
-    while getopts ":i:h" opt; do
-        case $opt in
-            i) project_id="$OPTARG" ;;
-            h) cat <<EOF
-Usage: $0 delete-project -i PROJECT_ID [-h]
-  -i PROJECT_ID  Project ID to delete (required)
-  -h             Show help
-EOF
-               return ;;
-            \?) print_error "Invalid option: -$OPTARG"; return 1 ;;
-            :) print_error "Option -$OPTARG requires an argument"; return 1 ;;
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -i|--id) project_id="$2"; shift 2 ;;
+            -h|--help)
+                echo "Usage: delete-project -i PROJECT_ID"
+                echo "  -i, --id    Project ID (required)"
+                return 0
+                ;;
+            *) error "Unknown option: $1"; return 1 ;;
         esac
     done
     
     if [[ -z "$project_id" ]]; then
-        print_error "Project ID is required"
+        error "Project ID is required"
         return 1
     fi
     
-    # Get project details first for confirmation
-    local project_info=$(api_call GET "/projects/$project_id")
-    if ! echo "$project_info" | jq -e '.id' >/dev/null; then
-        print_error "Project $project_id not found"
-        return 1
+    if [[ "$INTERACTIVE" == "true" ]]; then
+        warning "This will permanently delete project $project_id and all its tasks"
+        echo "Are you sure? [y/N]"
+        read -r response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            info "Delete cancelled"
+            return 0
+        fi
     fi
     
-    local name=$(echo "$project_info" | jq -r '.name // "Unknown"')
-    print_warning "Deleting project $project_id: $name"
-    
-    local response=$(api_call DELETE "/projects/$project_id")
-    
-    if [[ "$response" == "" ]] || echo "$response" | jq -e '.message' >/dev/null 2>&1; then
-        print_success "Project $project_id deleted successfully"
+    if api_call "DELETE" "/projects/$project_id" >/dev/null; then
+        success "Project $project_id deleted successfully"
     else
-        print_error "Failed to delete project: $response"
+        error "Failed to delete project"
         return 1
     fi
 }
 
-# Legacy support functions (for backward compatibility)
-add_task() {
-    print_warning "Legacy usage detected. Consider using: $0 add-task -p $1 -t \"$2\""
-    cmd_add_task -p "$1" -t "$2" -d "$3" -r "${4:-medium}"
+cmd_config() {
+    show_config
 }
 
-list_tasks() {
-    print_warning "Legacy usage detected. Consider using: $0 list-tasks"
-    cmd_list_tasks "$@"
-}
+# Help function
+show_help() {
+    echo -e "${BLUE}AI Project Management CLI v3.0 (Simplified)${NC}"
+    echo
+    echo "Usage: $0 [GLOBAL OPTIONS] <command> [options]"
+    echo
 
-update_task() {
-    print_warning "Legacy usage detected. Consider using: $0 update-task -i $1 -s $2"
-    cmd_update_task -i "$1" -s "$2"
-}
-
-# Legacy setup function
-setup() {
-    print_info "Database tables are automatically created by the API service"
-    check_deps
-    print_success "API is healthy and ready to use"
+    echo "GLOBAL OPTIONS:"
+    echo "  --env <env>          Force environment (dev|prod)"
+    echo "  --api-url <url>      Use specific API URL"
+    echo "  --non-interactive    Disable interactive prompts"
+    echo "  --verbose, -v        Enable verbose output"
+    echo "  --help, -h           Show this help"
+    echo
+    echo "COMMANDS:"
+    echo "  list-tasks           List tasks with filtering options"
+    echo "  add-task             Add a new task"
+    echo "  update-task          Update task properties"
+    echo "  delete-task          Delete a task"
+    echo "  list-projects        List all projects"
+    echo "  health               Check API health"
+    echo "  help                 Show this help"
+    echo "  add-note             Add a note to a task"
+    echo "  list-notes           List notes for a task"
+    echo "  delete-note          Delete a note"
+    echo "  add-project          Create a new project"
+    echo "  delete-project       Delete a project"
+    echo "  config               Show current configuration"
+    echo
+    echo "For command-specific help: $0 <command> --help"
+    echo
+    echo "EXAMPLES:"
+    echo "  $0 list-tasks -p 1 -s pending"
+    echo "  $0 add-task -p 1 -t \"Fix bug\" -r high"
+    echo "  $0 update-task -i 42 -s done"
+    echo "  $0 delete-task -i 42"
+    echo "  $0 --env dev list-projects"
 }
 
 # Main command dispatcher
 main() {
+    # Parse global arguments directly
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --env) ENVIRONMENT="$2"; shift 2 ;;
+            --api-url) API_BASE_URL="$2"; shift 2 ;;
+            --non-interactive) INTERACTIVE=false; shift ;;
+            --verbose|-v) VERBOSE=true; shift ;;
+            --help|-h) show_help; return 0 ;;
+            *) break ;; # First non-global arg is the command
+        esac
+    done
+    
     if [[ $# -eq 0 ]]; then
-        cat <<EOF
-${BLUE}AI Project Management CLI v2.2 (Enhanced with Projects)${NC}
-
-Usage: $0 <command> [options]
-
-Project Commands:
-  list-projects  List all projects
-  add-project    Create a new project
-  delete-project Delete a project
-
-Task Commands:
-  list-tasks     List tasks
-  add-task       Add a new task  
-  update-task    Update task status
-  delete-task    Delete a task
-
-Note Commands:
-  list-notes     List notes for a task
-  add-note       Add a note to a task
-  delete-note    Delete a note
-
-System Commands:
-  setup          Check API health
-  help           Show this help
-
-For command-specific help: $0 <command> -h
-
-Examples:
-  $0 list-tasks -v
-  $0 add-task -p 1 -t "Fix bug" -r high
-  $0 update-task -i 42 -s done
-  $0 update-task -i 42 -t "New title" -d "New description"
-  $0 delete-task -i 42
-  $0 list-projects
-  $0 add-project -n "New Project" -d "Project description"
-  $0 delete-project -i 1
-  $0 add-note -t 42 -c "Progress update: completed initial analysis"
-  $0 list-notes -t 42
-
-Legacy format still supported:
-  $0 add-task PROJECT_ID "Title" "Description" priority
-  $0 update-task TASK_ID STATUS
-EOF
-        return
+        show_help
+        return 0
     fi
     
     local command="$1"
     shift
     
-    # Reset getopts
-    OPTIND=1
-    
+    # Initialize environment for commands that need it
     case "$command" in
-        list-tasks) check_deps; cmd_list_tasks "$@" ;;
-        add-task) check_deps; cmd_add_task "$@" ;;
-        update-task) check_deps; cmd_update_task "$@" ;;
-        delete-task) check_deps; cmd_delete_task "$@" ;;
-        list-projects) check_deps; cmd_list_projects "$@" ;;
-        add-project) check_deps; cmd_add_project "$@" ;;
-        delete-project) check_deps; cmd_delete_project "$@" ;;
-        list-notes) check_deps; cmd_list_notes "$@" ;;
-        add-note) check_deps; cmd_add_note "$@" ;;
-        delete-note) check_deps; cmd_delete_note "$@" ;;
-        setup) setup ;;
-        help) main ;;
-        # Legacy support
-        list_tasks) check_deps; list_tasks "$@" ;;
-        update_task) check_deps; update_task "$@" ;;
-        *) print_error "Unknown command: $command"; main; return 1 ;;
+        help) show_help; return 0 ;;
+        *) init_env && check_deps ;;
+    esac
+    
+    # Execute command
+    case "$command" in
+        list-tasks) cmd_list_tasks "$@" ;;
+        add-task) cmd_add_task "$@" ;;
+        update-task) cmd_update_task "$@" ;;
+        delete-task) cmd_delete_task "$@" ;;
+        list-projects) cmd_list_projects "$@" ;;
+        health) cmd_health ;;
+        add-note) cmd_add_note "$@" ;;
+        list-notes) cmd_list_notes "$@" ;;
+        delete-note) cmd_delete_note "$@" ;;
+        add-project) cmd_add_project "$@" ;;
+        delete-project) cmd_delete_project "$@" ;;
+        config) cmd_config ;;
+        *) error "Unknown command: $command"; show_help; return 1 ;;
     esac
 }
 
-# Run if executed directly
+# Run if executed directly (not sourced)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi

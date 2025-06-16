@@ -35,11 +35,11 @@ We need a comprehensive implementation strategy that combines all previous ADRs 
 
 #### Scripts:
 ```bash
-# Clean current repository
-./scripts/cleanup-repository.sh
+# Clean current repository (COMPLETED - script removed after use)
+# ./scripts/cleanup-repository.sh
 
-# Validate cleanup
-./scripts/validate-cleanup.sh
+# Validate cleanup (COMPLETED - script removed after use)
+# ./scripts/validate-cleanup.sh
 
 # Initialize Wails project
 wails init -n comfyui-launcher -t typescript

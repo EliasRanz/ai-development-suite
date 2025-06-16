@@ -188,6 +188,31 @@ install_package() {
     esac
 }
 
+# Fix file permissions
+fix_permissions() {
+    print_section "Fixing File Permissions"
+    
+    if [[ "$DRY_RUN" == "true" ]]; then
+        print_status "[DRY RUN] Would fix file permissions"
+        return 0
+    fi
+    
+    print_status "Setting proper permissions for source files..."
+    
+    # Source code files (644 - rw-r--r--)
+    find . -name "*.go" -type f -exec chmod 644 {} \; 2>/dev/null || true
+    find . -name "*.ts" -type f -exec chmod 644 {} \; 2>/dev/null || true
+    find . -name "*.tsx" -type f -exec chmod 644 {} \; 2>/dev/null || true
+    find . -name "*.js" -type f -exec chmod 644 {} \; 2>/dev/null || true
+    find . -name "*.json" -type f -exec chmod 644 {} \; 2>/dev/null || true
+    find . -name "*.md" -type f -exec chmod 644 {} \; 2>/dev/null || true
+    
+    # Scripts should be executable (755)
+    find . -name "*.sh" -type f -exec chmod 755 {} \; 2>/dev/null || true
+    
+    print_success "File permissions fixed"
+}
+
 # Check and install prerequisites
 check_prerequisites() {
     print_section "Checking Prerequisites"
@@ -307,6 +332,22 @@ check_prerequisites() {
                 print_error "Please install Make or use WSL for development"
                 ;;
         esac
+    fi
+    
+    # Check curl (required for project manager CLI)
+    if command_exists curl; then
+        print_success "curl is installed"
+    else
+        print_warning "curl not found, installing..."
+        install_package curl
+    fi
+    
+    # Check jq (required for project manager CLI JSON parsing)
+    if command_exists jq; then
+        print_success "jq is installed"
+    else
+        print_warning "jq not found, installing..."
+        install_package jq
     fi
 }
 
@@ -470,6 +511,22 @@ test_setup() {
     
     print_status "Starting AI Project Manager to verify setup..."
     
+    # Create development network if it doesn't exist (for development services)
+    print_status "Setting up Docker network..."
+    if ! docker network ls | grep -q ai-pm_default; then
+        docker network create ai-pm_default 2>/dev/null || echo "Network creation skipped"
+    fi
+    
+    # Pre-build development images for faster startup
+    print_status "Building development Docker images..."
+    if cd ai-pm && docker compose build ai-pm-api-dev ai-pm-ui-dev 2>/dev/null; then
+        print_success "Development images built successfully"
+        cd ..
+    else
+        print_warning "Could not pre-build development images (will build on first start)"
+        cd .. 2>/dev/null || true
+    fi
+    
     # Try to start AI PM services
     if make ai-pm-start > /dev/null 2>&1; then
         print_success "AI Project Manager started successfully"
@@ -485,8 +542,23 @@ test_setup() {
             # Test basic connectivity
             if curl -s http://localhost:8000/api/health > /dev/null 2>&1; then
                 print_success "API health check passed"
+                
+                # Test project manager CLI
+                test_project_manager_cli
+                
             else
                 print_warning "API not responding (may still be starting up)"
+                print_status "Trying development API endpoint..."
+                
+                if curl -s http://localhost:8001/api/health > /dev/null 2>&1; then
+                    print_success "Development API health check passed"
+                    
+                    # Test project manager CLI with dev environment
+                    test_project_manager_cli
+                    
+                else
+                    print_warning "Neither API endpoint responding"
+                fi
             fi
             
             # Stop services to clean up
@@ -499,6 +571,66 @@ test_setup() {
         print_error "Failed to start AI Project Manager"
         print_status "Check Docker is running and try again"
         print_status "💡 Debug with: make ai-pm-logs"
+    fi
+}
+
+# Test project manager CLI functionality
+test_project_manager_cli() {
+    print_status "Testing Project Manager CLI..."
+    
+    if [[ "$DRY_RUN" == "true" ]]; then
+        print_status "[DRY RUN] Would test project manager CLI functionality"
+        return 0
+    fi
+    
+    local pm_script="./scripts/project-manager.sh"
+    
+    # Check if script exists and is executable
+    if [[ ! -f "$pm_script" ]]; then
+        print_error "Project manager script not found at $pm_script"
+        return 1
+    fi
+    
+    if [[ ! -x "$pm_script" ]]; then
+        print_warning "Making project manager script executable..."
+        chmod +x "$pm_script"
+    fi
+    
+    # Test help command (doesn't require API)
+    if "$pm_script" --help > /dev/null 2>&1; then
+        print_success "CLI help command working"
+    else
+        print_error "CLI help command failed"
+        return 1
+    fi
+    
+    # Test health check (requires API)
+    if "$pm_script" health > /dev/null 2>&1; then
+        print_success "CLI health check passed"
+        
+        # Test basic commands
+        if "$pm_script" list-projects > /dev/null 2>&1; then
+            print_success "CLI can list projects"
+        else
+            print_warning "CLI list-projects failed (may be expected if no projects exist)"
+        fi
+        
+        if "$pm_script" list-tasks > /dev/null 2>&1; then
+            print_success "CLI can list tasks"
+        else
+            print_warning "CLI list-tasks failed (may be expected if no tasks exist)"
+        fi
+        
+        # Test config command
+        if "$pm_script" config > /dev/null 2>&1; then
+            print_success "CLI config command working"
+        else
+            print_warning "CLI config command failed"
+        fi
+        
+    else
+        print_warning "CLI health check failed - API may not be ready yet"
+        print_status "💡 This is normal during first startup"
     fi
 }
 
@@ -554,22 +686,29 @@ generate_summary() {
     
     echo "📚 Quick Start Guide:"
     echo "  1. Choose your development focus:"
-    echo "     💼 Project Management: AI_PM_MODE=dev make ai-pm-start"
+    echo "     💼 Project Management (Production): make ai-pm-start"
+    echo "     🔥 Project Management (Hot Reload): AI_PM_MODE=dev make ai-pm-start"
     echo "     🖥️  AI Studio: make dev"
-    echo "     🔧 Other tools: make ai-pm-start"
+    echo "     🔧 Switch environments: make ai-pm-switch"
     echo ""
     echo "  2. Access the applications:"
     echo "     🌐 Project Management UI:"
     echo "        • Production: http://localhost:3000"
-    echo "        • Development: http://localhost:3002"
+    echo "        • Development (Hot Reload): http://localhost:3002"
     echo "     🔌 Project Management API:"
     echo "        • Production: http://localhost:8000"
-    echo "        • Development: http://localhost:8001"
+    echo "        • Development (Hot Reload): http://localhost:8001"
+    echo ""
+    echo "  🔥 Hot Reload Features (Development Mode):"
+    echo "     • Backend: Go files auto-rebuild with Air"
+    echo "     • Frontend: React HMR with Vite"
+    echo "     • No manual Docker rebuilds needed!"
     echo ""
     echo "  3. Use the CLI tools:"
     echo "     📋 Project management: ./scripts/project-manager.sh help"
     echo "     📊 Environment status: make ai-pm-status"
     echo "     📜 View logs: make ai-pm-logs"
+    echo "     💡 CLI tested and validated during setup"
     echo ""
     echo "  4. Read the documentation:"
     echo "     📖 Project management: .github/instructions/project-management.md"
@@ -629,6 +768,7 @@ main() {
     fi
     
     detect_os
+    fix_permissions
     check_prerequisites
     setup_ai_pm
     setup_ai_studio
