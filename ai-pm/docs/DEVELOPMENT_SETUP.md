@@ -60,7 +60,7 @@ AI_PM_MODE=dev make ai-pm-start
 
 ### 2. Verify Setup
 ```bash
-# Check service status
+# Check service status (shows database, dev, and prod environments)
 make ai-pm-status
 
 # Check logs
@@ -73,7 +73,28 @@ curl http://localhost:8001/api/health
 curl -I http://localhost:3002
 ```
 
-### 3. Development Process
+### 3. Environment Management
+```bash
+# Switch between environments (preserves database automatically)
+AI_PM_MODE=dev make ai-pm-switch    # Switch to development
+make ai-pm-switch                   # Switch to production
+
+# Granular environment control
+make ai-pm-stop-dev                 # Stop development only
+make ai-pm-stop-prod                # Stop production only
+make ai-pm-stop                     # Stop both (preserves database)
+make ai-pm-stop-all                 # ⚠️ Stop everything including database
+
+# Status shows clear indicators
+make ai-pm-status
+# Output shows:
+# Database: ✅ Running
+# Production (ports 8000/3000): ❌ Stopped  
+# Development (ports 8001/3002): ✅ Running
+# 🔧 Development environment active
+```
+
+### 4. Development Process
 ```bash
 # Make code changes (automatic hot reload)
 # - Frontend changes: Instant HMR in browser
@@ -82,7 +103,10 @@ curl -I http://localhost:3002
 # View logs in real-time
 make ai-pm-logs
 
-# Stop services when done
+# Switch modes as needed (database preserved)
+make ai-pm-switch
+
+# Stop services when done (database preserved for next session)
 make ai-pm-stop
 ```
 

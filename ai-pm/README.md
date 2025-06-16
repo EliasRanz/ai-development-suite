@@ -35,6 +35,21 @@ make ai-pm-start
 # - API: http://localhost:8000/api
 ```
 
+### Environment Management
+```bash
+# Check what's running (shows both dev and prod status)
+make ai-pm-status
+
+# Switch between environments (preserves database and data)
+AI_PM_MODE=dev make ai-pm-switch    # Switch to development
+make ai-pm-switch                   # Switch to production
+
+# Stop environments (database preserved by default)
+make ai-pm-stop-dev                 # Stop development only
+make ai-pm-stop-prod                # Stop production only  
+make ai-pm-stop                     # Stop both environments
+```
+
 ### CLI Usage
 ```bash
 # Use the project management CLI
