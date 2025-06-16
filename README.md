@@ -33,8 +33,38 @@ Legacy ComfyUI launcher components (being replaced by AI Studio).
 
 ## 🚀 Quick Start
 
-### Environment Setup
-Before using any tools, configure your environment:
+### New Machine Setup (Recommended)
+For first-time setup on a new development machine:
+
+```bash
+# Clone the repository
+git clone https://github.com/EliasRanz/ai-development-suite.git
+cd ai-development-suite
+
+# Run cross-platform setup script
+make setup-dev
+
+# Or preview what would be done first
+./scripts/setup-dev-environment.sh --dry-run
+```
+
+The setup script will automatically:
+- Detect your OS (Windows/WSL, macOS, Linux) 
+- Install prerequisites (Docker, Git, Node.js, Go, Make)
+- Install development tools (Air, Wails)
+- Configure secure environment settings
+- Test the complete setup
+
+**Setup options:**
+- `--dry-run` - Preview changes without making them
+- `--skip-tests` - Skip validation tests for faster setup
+- `--verbose` - Show detailed output for debugging
+- `--help` - Show all available options
+
+📖 **For detailed setup instructions**: See [SETUP.md](SETUP.md)
+
+### Manual Environment Setup
+If you prefer manual setup or need to configure specific settings:
 
 ```bash
 # Copy the environment template
