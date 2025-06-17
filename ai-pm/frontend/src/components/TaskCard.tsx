@@ -1,5 +1,6 @@
 import { Task, PriorityValue } from '../types';
 import { Clock, User, AlertTriangle } from 'lucide-react';
+import MarkdownRenderer from './MarkdownRenderer';
 
 interface TaskCardProps {
   task: Task;
@@ -51,9 +52,12 @@ export default function TaskCard({ task, priorityConfig, isBlocked = false, onVi
       </div>
 
       {task.description && (
-        <p className="text-gray-600 text-xs mb-3 line-clamp-3 break-words">
-          {task.description}
-        </p>
+        <div className="text-gray-600 text-xs mb-3 line-clamp-3 break-words">
+          <MarkdownRenderer 
+            content={task.description} 
+            className="[&>*]:mb-1 [&>*:last-child]:mb-0"
+          />
+        </div>
       )}
 
       {isBlocked && task.blocked_reason && (

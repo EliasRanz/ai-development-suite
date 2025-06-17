@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Task, StatusValue, PriorityValue, UpdateTaskRequest, Note } from '../types';
-import { ArrowLeft, Calendar, User, MessageCircle, Plus, Trash2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Calendar, MessageCircle, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { api } from '../api';
+import MarkdownRenderer from './MarkdownRenderer';
 
 interface TaskPageProps {
   task: Task;
@@ -9,15 +10,28 @@ interface TaskPageProps {
   priorityValues: PriorityValue[];
   onSave: (task: UpdateTaskRequest) => Promise<void>;
   onBack: () => void;
+  isEditMode?: boolean;
+  onEditModeChange?: (editing: boolean) => void;
 }
 
-export default function TaskPage({ task, statusValues, priorityValues, onSave, onBack }: TaskPageProps) {
-  const [isEditing, setIsEditing] = useState(false);
+export default function TaskPage({ task, statusValues, priorityValues, onSave, onBack, isEditMode = false, onEditModeChange }: TaskPageProps) {
+  const [isEditing, setIsEditing] = useState(isEditMode);
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description || '');
   const [status, setStatus] = useState(task.status);
   const [priority, setPriority] = useState(task.priority);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Sync edit mode with external prop
+  useEffect(() => {
+    setIsEditing(isEditMode);
+  }, [isEditMode]);
+  
+  // Notify parent of edit mode changes
+  const updateEditMode = (editing: boolean) => {
+    setIsEditing(editing);
+    onEditModeChange?.(editing);
+  };
   
   // Notes state
   const [notes, setNotes] = useState<Note[]>([]);
@@ -186,7 +200,7 @@ export default function TaskPage({ task, statusValues, priorityValues, onSave, o
         ...(status !== task.status && { status }),
         ...(priority !== task.priority && { priority }),
       });
-      setIsEditing(false);
+      updateEditMode(false);
     } catch (error) {
       console.error('Failed to save task:', error);
     } finally {
@@ -199,7 +213,7 @@ export default function TaskPage({ task, statusValues, priorityValues, onSave, o
     setDescription(task.description || '');
     setStatus(task.status);
     setPriority(task.priority);
-    setIsEditing(false);
+    updateEditMode(false);
   };
 
   const getStatusConfig = (statusKey: string) => {
@@ -225,268 +239,203 @@ export default function TaskPage({ task, statusValues, priorityValues, onSave, o
 
   return (
     <div className="max-w-4xl mx-auto py-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={onBack}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            title="Back to board"
-          >
-            <ArrowLeft className="w-5 h-5 text-gray-600" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Task #{task.id}</h1>
-            <p className="text-sm text-gray-600">
-              {task.project_name && `Project: ${task.project_name}`}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center space-x-2">
-          {!isEditing && (
+      {/* Unified Header with Title and Metadata */}
+      <div className="p-4 mb-1">
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center space-x-4 flex-1">
             <button
-              onClick={() => setIsEditing(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              onClick={onBack}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+              title="Back to board"
             >
-              Edit Task
+              <ArrowLeft className="w-5 h-5 text-gray-600" />
             </button>
-          )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center space-x-3 mb-2">
+                <h1 className="text-2xl font-bold text-gray-900">Task #{task.id}</h1>
+                <span className="text-sm text-gray-500">•</span>
+                <span className="text-sm text-gray-600">{task.project_name}</span>
+              </div>
+              
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full text-xl font-semibold p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Task title"
+                />
+              ) : (
+                <h2 className="text-xl font-semibold text-gray-900 mb-2">{task.title}</h2>
+              )}
+              
+              {/* Task Metadata */}
+              <div className="flex items-center space-x-6 text-sm text-gray-600">
+                <div className="flex items-center space-x-2">
+                  <Calendar className="w-4 h-4" />
+                  <span>Created: {formatDate(task.created_at)}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Calendar className="w-4 h-4" />
+                  <span>Updated: {formatDate(task.updated_at)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Status and Priority in Header - Vertically Stacked */}
+          <div className="flex flex-col space-y-2 flex-shrink-0 ml-6">
+            {/* Status */}
+            <div className="flex flex-col">
+              <label className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-1">Status</label>
+              {isEditing ? (
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm min-w-[120px]"
+                >
+                  {statusValues.filter(statusOption => statusOption.key !== 'deleted').map((statusOption) => (
+                    <option key={statusOption.key} value={statusOption.key}>
+                      {statusOption.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="flex items-center space-x-2 px-3 py-2 bg-gray-50 rounded-lg min-w-[120px]">
+                  <div
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: statusConfig.color }}
+                    title={`Task is currently ${statusConfig.label.toLowerCase()}`}
+                  />
+                  <span className="text-sm font-medium">{statusConfig.label}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Priority */}
+            <div className="flex flex-col">
+              <label className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-1">Priority</label>
+              {isEditing ? (
+                <select
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm min-w-[120px]"
+                >
+                  {priorityValues.map((priorityOption) => (
+                    <option key={priorityOption.key} value={priorityOption.key}>
+                      {priorityOption.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg min-w-[120px] ${
+                  priorityConfig.key === 'critical' ? 'bg-red-50 text-red-700' :
+                  priorityConfig.key === 'high' ? 'bg-orange-50 text-orange-700' :
+                  priorityConfig.key === 'medium' ? 'bg-yellow-50 text-yellow-700' :
+                  priorityConfig.key === 'low' ? 'bg-blue-50 text-blue-700' :
+                  'bg-gray-50 text-gray-700'
+                }`} title={`This task has ${priorityConfig.label.toLowerCase()} priority`}>
+                  {priorityConfig.icon && <span className="text-sm">{priorityConfig.icon}</span>}
+                  <span className="text-sm font-medium">{priorityConfig.label}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Save/Cancel Controls - Only shown when editing */}
           {isEditing && (
-            <>
-              <button
-                onClick={handleCancel}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                Cancel
-              </button>
+            <div className="flex flex-col space-y-2 flex-shrink-0 ml-4">
               <button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 text-sm"
               >
-                {isSaving ? 'Saving...' : 'Save Changes'}
+                {isSaving ? 'Saving...' : 'Save'}
               </button>
-            </>
+              <button
+                onClick={handleCancel}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
+              >
+                Cancel
+              </button>
+            </div>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Title */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
-            {isEditing ? (
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full text-xl font-semibold p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Task title"
-              />
-            ) : (
-              <h2 className="text-xl font-semibold text-gray-900">{task.title}</h2>
-            )}
-          </div>
-
-          {/* Description */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-            {isEditing ? (
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={6}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Task description"
-              />
-            ) : (
-              <div className="text-gray-700 whitespace-pre-wrap">
-                {task.description || 'No description provided.'}
-              </div>
-            )}
-          </div>
-
-          {/* Notes Section */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                <MessageCircle className="w-5 h-5" />
-                <span>Notes</span>
-                <span className="text-sm font-normal text-gray-500">({notes.length})</span>
-              </h3>
-            </div>
-
-            {/* Add Note Form */}
-            <div className="mb-6">
-              <div className="flex space-x-3">
-                <textarea
-                  value={newNote}
-                  onChange={(e) => setNewNote(e.target.value)}
-                  placeholder="Add a note..."
-                  rows={3}
-                  className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <button
-                  onClick={handleAddNote}
-                  disabled={!newNote.trim() || addingNote}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>{addingNote ? 'Adding...' : 'Add'}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Notes List */}
-            {notesLoading ? (
-              <div className="text-center py-8 text-gray-500">
-                Loading notes...
-              </div>
-            ) : notes.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                No notes yet. Add the first one above.
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {notes.map((note) => (
-                  <div key={note.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="text-gray-800 whitespace-pre-wrap">{note.content}</p>
-                        <div className="mt-2 flex items-center space-x-2 text-xs text-gray-500">
-                          <Calendar className="w-3 h-3" />
-                          <span>
-                            {new Date(note.created_at).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteNote(note.id)}
-                        className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                        title="Delete note"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+      {/* Description and Actions Bar */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+        {/* Description - Takes up 3 columns */}
+        <div className="lg:col-span-3 bg-white rounded-lg border border-gray-200 p-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+          {isEditing ? (
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={6}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Task description"
+            />
+          ) : (
+            <MarkdownRenderer 
+              content={task.description || ''} 
+              fallbackText="No description provided."
+              className="text-gray-700"
+            />
+          )}
         </div>
 
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Status */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <label className="block text-sm font-medium text-gray-700 mb-3">Status</label>
-            {isEditing ? (
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                {statusValues.filter(statusOption => statusOption.key !== 'deleted').map((statusOption) => (
-                  <option key={statusOption.key} value={statusOption.key}>
-                    {statusOption.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="flex items-center space-x-2">
-                <div
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: statusConfig.color }}
-                />
-                <span className="font-medium">{statusConfig.label}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Priority */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <label className="block text-sm font-medium text-gray-700 mb-3">Priority</label>
-            {isEditing ? (
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                {priorityValues.map((priorityOption) => (
-                  <option key={priorityOption.key} value={priorityOption.key}>
-                    {priorityOption.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="flex items-center space-x-2">
-                {priorityConfig.icon && <span className="text-lg">{priorityConfig.icon}</span>}
-                <span className="font-medium">{priorityConfig.label}</span>
-              </div>
-            )}
-          </div>
-
+        {/* Actions - Vertically Stacked */}
+        <div className="space-y-4">
           {/* Block/Unblock Task */}
-          <div className={`rounded-lg border p-6 ${isTaskBlocked() ? 'bg-orange-50 border-orange-200' : 'bg-white border-gray-200'}`}>
-            <h3 className={`text-sm font-medium mb-3 flex items-center space-x-2 ${isTaskBlocked() ? 'text-orange-800' : 'text-gray-700'}`}>
+          <div className={`rounded-lg border p-4 ${isTaskBlocked() ? 'bg-orange-50 border-orange-200' : 'bg-white border-gray-200'}`}>
+            <h3 className={`text-sm font-medium mb-2 flex items-center space-x-2 ${isTaskBlocked() ? 'text-orange-800' : 'text-gray-700'}`}>
               <AlertTriangle className="w-4 h-4" />
-              <span>{isTaskBlocked() ? 'Task Blocked' : 'Block Task'}</span>
+              <span>{isTaskBlocked() ? 'Blocked' : 'Block'}</span>
             </h3>
             
             {isTaskBlocked() ? (
               <div>
-                <p className="text-sm text-orange-700 mb-3">
-                  <strong>Reason:</strong> {task.blocked_reason}
-                </p>
-                <p className="text-sm text-orange-600 mb-4">
-                  This task is currently blocked. Click unblock to allow it to proceed.
+                <p className="text-xs text-orange-600 mb-2">
+                  Reason: {task.blocked_reason}
                 </p>
                 <button
                   onClick={handleUnblockTask}
                   disabled={blocking}
-                  className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
+                  className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-1 text-sm"
                 >
                   {blocking ? (
                     <span>Unblocking...</span>
                   ) : (
                     <>
                       <span>✅</span>
-                      <span>Unblock Task</span>
+                      <span>Unblock</span>
                     </>
                   )}
                 </button>
               </div>
             ) : (
               <div>
-                <p className="text-sm text-gray-600 mb-3">
-                  Block this task if it cannot proceed due to dependencies or issues.
+                <p className="text-xs text-gray-600 mb-2">
+                  Block if cannot proceed.
                 </p>
-                <textarea
-                  value={blockReason}
-                  onChange={(e) => setBlockReason(e.target.value)}
-                  placeholder="Reason for blocking (required)..."
-                  rows={2}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 mb-3 text-sm"
-                />
                 <button
-                  onClick={handleBlockTask}
-                  disabled={!blockReason.trim() || blocking}
-                  className="w-full bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
+                  onClick={() => {
+                    const reason = prompt("Reason for blocking (required):");
+                    if (reason?.trim()) {
+                      setBlockReason(reason);
+                      handleBlockTask();
+                    }
+                  }}
+                  disabled={blocking}
+                  className="w-full bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-1 text-sm"
                 >
                   {blocking ? (
                     <span>Blocking...</span>
                   ) : (
                     <>
-                      <AlertTriangle className="w-4 h-4" />
-                      <span>Block Task</span>
+                      <AlertTriangle className="w-3 h-3" />
+                      <span>Block</span>
                     </>
                   )}
                 </button>
@@ -495,50 +444,107 @@ export default function TaskPage({ task, statusValues, priorityValues, onSave, o
           </div>
 
           {/* Delete Task */}
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-            <h3 className="text-sm font-medium text-red-800 mb-3 flex items-center space-x-2">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <h3 className="text-sm font-medium text-red-800 mb-2 flex items-center space-x-2">
               <Trash2 className="w-4 h-4" />
-              <span>Delete Task</span>
+              <span>Delete</span>
             </h3>
-            <p className="text-sm text-red-700 mb-4">
-              This action cannot be undone. The task will be moved to deleted status.
+            <p className="text-xs text-red-700 mb-2">
+              Cannot be undone.
             </p>
             <button
               onClick={handleDeleteTask}
               disabled={deleting}
-              className="w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
+              className="w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-1 text-sm"
             >
               {deleting ? (
                 <span>Deleting...</span>
               ) : (
                 <>
-                  <Trash2 className="w-4 h-4" />
-                  <span>Delete Task</span>
+                  <Trash2 className="w-3 h-3" />
+                  <span>Delete</span>
                 </>
               )}
             </button>
           </div>
+        </div>
+      </div>
 
-          {/* Metadata */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-sm font-medium text-gray-700 mb-4">Information</h3>
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2 text-sm text-gray-600">
-                <Calendar className="w-4 h-4" />
-                <div>
-                  <span className="block">Created: {formatDate(task.created_at)}</span>
-                  <span className="block">Updated: {formatDate(task.updated_at)}</span>
-                </div>
-              </div>
-              {task.project_name && (
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <User className="w-4 h-4" />
-                  <span>Project: {task.project_name}</span>
-                </div>
-              )}
-            </div>
+      {/* Notes Section */}
+      <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+            <MessageCircle className="w-5 h-5" />
+            <span>Notes</span>
+            <span className="text-sm font-normal text-gray-500">({notes.length})</span>
+          </h3>
+        </div>
+
+        {/* Add Note Form */}
+        <div className="mb-6">
+          <div className="flex space-x-3">
+            <textarea
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value)}
+              placeholder="Add a note..."
+              rows={3}
+              className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <button
+              onClick={handleAddNote}
+              disabled={!newNote.trim() || addingNote}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{addingNote ? 'Adding...' : 'Add'}</span>
+            </button>
           </div>
         </div>
+
+        {/* Notes List */}
+        {notesLoading ? (
+          <div className="text-center py-8 text-gray-500">
+            Loading notes...
+          </div>
+        ) : notes.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            No notes yet. Add the first one above.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {notes.map((note) => (
+              <div key={note.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <MarkdownRenderer 
+                      content={note.content} 
+                      className="text-gray-800"
+                    />
+                    <div className="mt-2 flex items-center space-x-2 text-xs text-gray-500">
+                      <Calendar className="w-3 h-3" />
+                      <span>
+                        {new Date(note.created_at).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteNote(note.id)}
+                    className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                    title="Delete note"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
