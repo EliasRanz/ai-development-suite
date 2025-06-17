@@ -146,7 +146,7 @@ ai-pm-start: ## Start AI Project Manager services (auto-selects profile based on
 			fi; \
 		fi; \
 	}
-	@cd ai-pm && docker compose --profile $(AI_PM_PROFILE) up -d
+	@cd ai-pm && docker compose --profile $(AI_PM_PROFILE) up -d --build
 	@echo "Waiting for services to be ready..."
 	@sleep 5
 	@echo "✅ Services started: $(AI_PM_PORT_INFO)"
@@ -181,7 +181,7 @@ ai-pm-restart: ## Restart AI Project Manager services (current mode only, preser
 			docker compose rm -f ai-pm-api ai-pm-ui; \
 		fi; \
 	}
-	@cd ai-pm && docker compose --profile $(AI_PM_PROFILE) up -d
+	@cd ai-pm && docker compose --profile $(AI_PM_PROFILE) up -d --build
 	@echo "✅ Services restarted: $(AI_PM_PORT_INFO)"
 
 ai-pm-switch: ## Switch between development and production modes cleanly (preserves database)
@@ -191,12 +191,12 @@ ai-pm-switch: ## Switch between development and production modes cleanly (preser
 			echo "Switching from production to development mode..."; \
 			docker compose stop ai-pm-api ai-pm-ui; \
 			docker compose rm -f ai-pm-api ai-pm-ui; \
-			docker compose --profile development up -d; \
+			docker compose --profile development up -d --build; \
 		else \
 			echo "Switching from development to production mode..."; \
 			docker compose stop ai-pm-api-dev ai-pm-ui-dev; \
 			docker compose rm -f ai-pm-api-dev ai-pm-ui-dev; \
-			docker compose --profile production up -d; \
+			docker compose --profile production up -d --build; \
 		fi; \
 	}
 	@echo "Waiting for services to be ready..."
