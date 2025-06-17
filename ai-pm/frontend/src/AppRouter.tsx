@@ -206,6 +206,9 @@ function ProjectWrapper({
     if (newView === 'deleted') {
       // Always navigate to global deleted view
       navigate('/deleted');
+    } else if (newView === 'kanban') {
+      // For kanban view, just use the project slug without /kanban
+      navigate(`/projects/${projectSlug}`);
     } else if (projectSlug) {
       navigate(`/projects/${projectSlug}/${newView}`);
     }

@@ -9,7 +9,7 @@
 }
 
 @layer components {
-  .kanban-column {
+  .project-column {
     @apply bg-white border border-gray-200 rounded-lg;
     min-height: 500px;
     width: 280px; /* Mobile first */
@@ -19,34 +19,34 @@
   
   /* Responsive column widths and padding */
   @media (min-width: 768px) {
-    .kanban-column {
+    .project-column {
       width: 300px;
       padding: 1rem; /* 16px tablet */
     }
   }
   
   @media (min-width: 1024px) {
-    .kanban-column {
+    .project-column {
       width: 320px;
       padding: 1rem; /* 16px desktop */
     }
   }
   
   @media (min-width: 1280px) {
-    .kanban-column {
+    .project-column {
       width: 350px;
       padding: 1.25rem; /* 20px large desktop */
     }
   }
   
   @media (min-width: 1536px) {
-    .kanban-column {
+    .project-column {
       width: 380px;
       padding: 1.5rem; /* 24px xl desktop */
     }
   }
   
-  .kanban-card {
+  .project-card {
     @apply bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer relative;
     padding: 0.75rem; /* 12px */
     margin-bottom: 0.75rem; /* 12px */

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Project, Task, StatusValue, PriorityValue, UpdateTaskRequest } from './types';
 import { api } from './api';
 import { usePolling } from './hooks/usePolling';
-import KanbanBoard from './components/KanbanBoard';
+import ProjectBoard from './components/ProjectBoard';
 import TaskModal from './components/TaskModal';
 import TaskPage from './components/TaskPage';
 import LoadingSpinner from './components/LoadingSpinner';
@@ -30,7 +30,7 @@ export default function App({ selectedProject }: AppProps) {
   const [isTaskEditMode, setIsTaskEditMode] = useState(false);
   const [isLiveUpdateEnabled, setIsLiveUpdateEnabled] = useState(true);
 
-  // Determine current view from URL, default to kanban
+  // Determine current view from URL, default to project view (kanban)
   const currentView = view || 'kanban';
   const showTaskView = !!taskId;
 
@@ -220,7 +220,7 @@ export default function App({ selectedProject }: AppProps) {
           onBack={() => {
             if (selectedProject) {
               const slug = createProjectSlug(selectedProject);
-              navigate(`/projects/${slug}/kanban`);
+              navigate(`/projects/${slug}`);
             }
           }}
           isEditMode={isTaskEditMode}
@@ -229,7 +229,7 @@ export default function App({ selectedProject }: AppProps) {
       ) : (
         <>
           {selectedProject && currentView === 'kanban' && (
-            <KanbanBoard
+            <ProjectBoard
               tasks={tasks}
               statusValues={statusValues}
               priorityValues={priorityValues}

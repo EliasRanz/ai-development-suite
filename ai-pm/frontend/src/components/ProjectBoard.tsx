@@ -3,14 +3,14 @@ import TaskCard from './TaskCard';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
-interface KanbanBoardProps {
+interface ProjectBoardProps {
   tasks: Task[] | null;
   statusValues: StatusValue[];
   priorityValues: PriorityValue[];
   onViewTask?: (task: Task) => void;
 }
 
-export default function KanbanBoard({ tasks, statusValues, priorityValues, onViewTask }: KanbanBoardProps) {
+export default function ProjectBoard({ tasks, statusValues, priorityValues, onViewTask }: ProjectBoardProps) {
   const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(
     new Set(['done', 'deleted']) // Default: collapse completed and deleted columns
   );
@@ -75,7 +75,7 @@ export default function KanbanBoard({ tasks, statusValues, priorityValues, onVie
         // Render expanded column
         return (
           <div key={status.key} className="flex-shrink-0">
-            <div className="kanban-column transition-all duration-300">
+            <div className="project-column transition-all duration-300">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-2">
                   <button

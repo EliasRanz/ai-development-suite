@@ -31,9 +31,15 @@ export default function TaskCard({ task, priorityConfig, isBlocked = false, onVi
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
+  // Truncate description for better project board scanning
+  const truncateDescription = (text: string, maxLength: number = 100) => {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength).trim() + '...';
+  };
+
   return (
     <div
-      className={`kanban-card ${priorityStyle} relative cursor-pointer hover:shadow-md transition-all duration-200 ${
+      className={`project-card ${priorityStyle} relative cursor-pointer hover:shadow-md transition-all duration-200 ${
         isBlocked ? 'border-orange-400 border-2 bg-orange-100 ring-2 ring-orange-200' : ''
       }`}
       onClick={() => onView && onView(task)}
@@ -52,10 +58,10 @@ export default function TaskCard({ task, priorityConfig, isBlocked = false, onVi
       </div>
 
       {task.description && (
-        <div className="text-gray-600 text-xs mb-3 line-clamp-3 break-words">
+        <div className="text-gray-600 text-xs mb-3 line-clamp-2 break-words">
           <MarkdownRenderer 
-            content={task.description} 
-            className="[&>*]:mb-1 [&>*:last-child]:mb-0"
+            content={truncateDescription(task.description)} 
+            className="[&>*]:mb-1 [&>*:last-child]:mb-0 [&>p]:leading-relaxed"
           />
         </div>
       )}
