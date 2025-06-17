@@ -27,6 +27,8 @@ export default function App({ selectedProject }: AppProps) {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [isTaskEditMode, setIsTaskEditMode] = useState(false);
+  const [isLiveUpdateEnabled, setIsLiveUpdateEnabled] = useState(true);
 
   // Determine current view from URL, default to kanban
   const currentView = view || 'kanban';
@@ -84,9 +86,9 @@ export default function App({ selectedProject }: AppProps) {
     }
   };
 
-  // Auto-refresh tasks every 5 seconds when project is selected
+  // Auto-refresh tasks every 5 seconds when project is selected and live updates are enabled
   usePolling(loadTasks, { 
-    enabled: !!selectedProject && !loading, 
+    enabled: !!selectedProject && !loading && isLiveUpdateEnabled, 
     interval: 5000 
   });
 
@@ -139,6 +141,10 @@ export default function App({ selectedProject }: AppProps) {
     }
   };
 
+  const toggleLiveUpdates = () => {
+    setIsLiveUpdateEnabled(prev => !prev);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -175,18 +181,33 @@ export default function App({ selectedProject }: AppProps) {
             lastUpdated={lastUpdated}
             loading={tasksLoading}
             error={error}
+            isLiveUpdateEnabled={isLiveUpdateEnabled}
             onRefresh={handleManualRefresh}
+            onToggleLiveUpdate={toggleLiveUpdates}
           />
-          <button
-            onClick={() => {
-              setEditingTask(null);
-              setShowTaskModal(true);
-            }}
-            className="flex items-center space-x-2 btn-primary"
-          >
-            <Plus className="w-4 h-4" />
-            <span>New Task</span>
-          </button>
+          {showTaskView && editingTask ? (
+            <button
+              onClick={() => {
+                setIsTaskEditMode(true);
+                setShowTaskModal(true);
+              }}
+              className="flex items-center space-x-2 btn-primary"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Edit Task</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                setEditingTask(null);
+                setShowTaskModal(true);
+              }}
+              className="flex items-center space-x-2 btn-primary"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Task</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -202,6 +223,8 @@ export default function App({ selectedProject }: AppProps) {
               navigate(`/projects/${slug}/kanban`);
             }
           }}
+          isEditMode={isTaskEditMode}
+          onEditModeChange={setIsTaskEditMode}
         />
       ) : (
         <>
