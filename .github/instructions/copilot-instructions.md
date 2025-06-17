@@ -44,12 +44,25 @@ Use tools to check that services are running and accessible.
 
 ## Task Workflow (Per Development Task)
 1. **CHECK** current tasks first using tools: `./scripts/project-manager.sh list-tasks`
-2. **CREATE/UPDATE** tasks before starting work using tools
-3. **MOVE** task to appropriate status when starting using tools
-4. **UPDATE** status as work progresses using tools
-5. **COMMIT** with clear messages referencing task numbers
+2. **VERIFY** command syntax with `--help` before creating/updating tasks
+3. **CREATE/UPDATE** tasks using only documented flags and options
+4. **MOVE** task to appropriate status when starting using tools
+5. **UPDATE** status as work progresses using tools
+6. **COMMIT** with clear messages referencing task numbers
 
 **For detailed CLI commands and examples, see `project-management.md`**
+
+**COMMAND VERIFICATION EXAMPLES:**
+```bash
+# Verify command syntax FIRST
+./scripts/project-manager.sh add-task --help
+./scripts/project-manager.sh update-task --help
+
+# THEN use only documented options
+./scripts/project-manager.sh add-task -p 1 -t "Fix bug" -r high
+./scripts/project-manager.sh update-task -i 42 -s done
+./scripts/project-manager.sh list-tasks -p 1 -s todo
+```
 
 ## Version Control Workflow (CRITICAL)
 
@@ -98,6 +111,28 @@ Detailed explanation if needed:
 - **Always use tools** to run commands (`run_in_terminal` tool)
 - **Never ask users** to run commands themselves
 - **Use tools to check status** before assuming services are running
+
+## Command Verification (CRITICAL)
+- **ALWAYS check --help** before using any command with unfamiliar flags
+- **NEVER assume flags exist** based on other tools or general conventions
+- **VERIFY actual syntax** from the tool's own documentation
+- **USE only documented options** - if a flag doesn't appear in --help, it doesn't exist
+- **WHEN IN DOUBT, VERIFY** - always check help documentation rather than guessing
+
+## Command Verification Workflow
+**Before using any CLI command:**
+1. **CHECK help first**: `command --help` or `command help`
+2. **VERIFY flags exist**: Only use flags shown in help output
+3. **TEST syntax**: Try with simple examples if uncertain
+4. **DOCUMENT findings**: Note any differences from expected behavior
+
+**Examples:**
+```bash
+# ALWAYS do this first
+./scripts/project-manager.sh add-task --help
+./scripts/project-manager.sh update-task --help
+./scripts/project-manager.sh list-tasks --help
+```
 
 ## Development Environment Setup
 
