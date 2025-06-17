@@ -4,7 +4,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
 interface KanbanBoardProps {
-  tasks: Task[];
+  tasks: Task[] | null;
   statusValues: StatusValue[];
   priorityValues: PriorityValue[];
   onViewTask?: (task: Task) => void;
@@ -25,7 +25,7 @@ export default function KanbanBoard({ tasks, statusValues, priorityValues, onVie
     setCollapsedColumns(newCollapsed);
   };
   const getTasksForColumn = (statusKey: string) => {
-    return tasks.filter(task => task.status === statusKey);
+    return tasks?.filter(task => task.status === statusKey) || [];
   };
 
   const getPriorityConfig = (priorityKey: string) => {
