@@ -1,4 +1,65 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+
 export default function RegisterPage() {
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    confirmPassword: ''
+  })
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
+  const router = useRouter()
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setError('')
+
+    // Basic validation
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match')
+      setIsLoading(false)
+      return
+    }
+
+    try {
+      // TODO: Replace with actual registration endpoint
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+        }),
+      })
+
+      if (response.ok) {
+        // Registration successful - redirect to login
+        router.push('/login?message=registration-success')
+      } else {
+        const errorData = await response.json()
+        setError(errorData.message || 'Registration failed')
+      }
+    } catch (error) {
+      setError('An unexpected error occurred')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData(prev => ({
+      ...prev,
+      [e.target.name]: e.target.value
+    }))
+  }
   return (
     <div className="space-y-6">
       <form className="space-y-6">
@@ -91,7 +152,7 @@ export default function RegisterPage() {
       <div className="text-center">
         <p className="text-sm text-gray-600">
           Already have an account?{' '}
-          <a href="/auth/login" className="font-medium text-blue-600 hover:text-blue-500">
+          <a href="/login" className="font-medium text-blue-600 hover:text-blue-500">
             Sign in
           </a>
         </p>

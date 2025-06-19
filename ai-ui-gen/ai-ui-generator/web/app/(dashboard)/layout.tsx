@@ -1,10 +1,41 @@
+'use client'
+
 import { ReactNode } from 'react'
+import { useSession, signOut } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 
 interface DashboardLayoutProps {
   children: ReactNode
 }
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
+  const { data: session, status } = useSession()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (status === 'loading') return // Still loading
+    if (!session) router.push('/login') // Not authenticated
+  }, [session, status, router])
+
+  const handleSignOut = () => {
+    signOut({ callbackUrl: '/login' })
+  }
+
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-2 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!session) {
+    return null // Will redirect to login
+  }
   return (
     <div className="min-h-screen bg-background">
       {/* Navigation Header */}
@@ -31,8 +62,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </nav>
 
             <div className="flex items-center space-x-4">
-              {/* TODO: Add user menu */}
-              <button className="bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90">
+              <span className="text-sm text-gray-600">
+                Welcome, {session.user?.name || session.user?.email}
+              </span>
+              <button 
+                onClick={handleSignOut}
+                className="bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90"
+              >
                 Sign Out
               </button>
             </div>
