@@ -184,3 +184,88 @@ make ai-pm-status
 - **Visual feedback** - Status command shows exactly what's running with clear indicators
 - **Granular control** - Stop specific environments without affecting others
 - **Safe defaults** - Database preserved unless explicitly requested to stop
+
+# Project Management Standards for Agentic Workflows
+
+All agents must use the project management system and CLI for all task tracking, updates, and workflow actions. Reference: [copilot-instructions.md], [context.md], [coding-standards.md], [version-control.md], [script-management.md], [testing.md].
+
+## Core Principles
+- **Automation**: Use CLI tools/scripts for all project management actions. Manual tracking outside the system is prohibited.
+- **Traceability**: Document all progress, blockers, and handoffs in the session context and project management system.
+- **Task Status Enforcement**: Agents must update the task status to "in progress" before starting work, and update status at each workflow step (e.g., done, blocked).
+- **Integration**: All commits and PRs must reference relevant tasks for traceability.
+
+## Task Workflow
+1. **List Current Tasks**
+   - `./scripts/project-manager.sh list-tasks`
+2. **Select and Update Task Status**
+   - Before starting work: `./scripts/project-manager.sh update-task -i [TASK_ID] -s "in_progress"`
+   - Update status as work progresses: `./scripts/project-manager.sh update-task -i [TASK_ID] -s [STATUS]`
+3. **Add Progress Notes**
+   - `./scripts/project-manager.sh add-note -t [TASK_ID] -c "[PROGRESS_UPDATE]"`
+4. **Complete Task**
+   - `./scripts/project-manager.sh update-task -i [TASK_ID] -s "done"`
+   - Add completion notes: `./scripts/project-manager.sh add-note -t [TASK_ID] -c "Completed: [SUMMARY]"`
+5. **Escalate Blockers**
+   - If blocked, update status: `./scripts/project-manager.sh update-task -i [TASK_ID] -s "blocked"`
+   - Document blockers in session context and notify responsible parties.
+
+## Task Creation & Collaboration
+- Before creating a new task, agents should engage in a constructive conversation with the user (or other agents) to clarify the task’s purpose, scope, and desired outcome.
+- Summarize the discussion and agreed-upon requirements in the task description and acceptance criteria.
+- Confirm mutual understanding before proceeding with task creation.
+
+## Additional Best Practices
+- **Task Granularity:** Tasks should be small, well-defined, and deliverable in a single session or PR whenever possible. Large tasks must be broken down.
+- **Acceptance Criteria:** Each task should have clear acceptance criteria or a definition of done, documented in the task description or notes.
+- **Task Review & Retrospective:** After completion, agents should review tasks for lessons learned, blockers, or improvements, and document findings for continuous improvement.
+- **Task Assignment & Ownership:** Clearly assign tasks to responsible agents and update ownership on handoff.
+- **Automated Reminders & Status Checks:** Use scripts or bots to remind agents of stale tasks, required status updates, or missing documentation.
+- **Linking to Documentation & Standards:** Link tasks to relevant documentation, standards, or ADRs for context.
+
+## Task Status Values
+- Use the help command to get current valid status values:
+  - `./scripts/project-manager.sh update-task -h`
+- Typical statuses: todo, in_progress, blocked, done
+
+## Task Prioritization
+- Use the help command to get current valid priority values:
+  - `./scripts/project-manager.sh add-task -h`
+- Review and prioritize tasks regularly; escalate urgent issues as needed.
+
+## Commit & PR Integration
+- All commits must reference the relevant task ID in the commit message.
+- Link PRs and ADRs to project management tasks for traceability.
+
+## Session Context & Handoffs
+- Document all progress, blockers, and handoffs in the session context and project management system.
+- When handing off a task, summarize the current state and next steps in the task notes.
+
+## Continuous Improvement
+- Agents should propose improvements to the project management workflow and document rationale in the session context or project management system.
+
+## Example CLI Commands
+```bash
+# List tasks
+./scripts/project-manager.sh list-tasks
+# Add a new task
+./scripts/project-manager.sh add-task -p [PROJECT_ID] -t "[TITLE]" -d "[DESCRIPTION]" -r [PRIORITY]
+# Update task status
+./scripts/project-manager.sh update-task -i [TASK_ID] -s "in_progress"
+# Add a progress note
+./scripts/project-manager.sh add-note -t [TASK_ID] -c "[PROGRESS_UPDATE]"
+# Mark task as done
+./scripts/project-manager.sh update-task -i [TASK_ID] -s "done"
+```
+
+## Glossary (Expanded)
+- **Task Status:** The current state of a task (e.g., todo, in_progress, blocked, done).
+- **Session Context:** The current state, rationale, and notes relevant to the agent’s work, shared across tasks and agents.
+- **Handoff:** The process of transferring a task or context between agents, documented in task notes and session context.
+- **Acceptance Criteria:** The specific requirements that must be met for a task to be considered complete.
+- **Definition of Done:** The agreed-upon conditions that define task completion.
+- **Retrospective:** A review of completed tasks to identify lessons learned and improvements.
+- **Ownership:** The agent currently responsible for a task.
+
+---
+For authoritative commands and environment management, always use `make help` and reference the latest standards.
