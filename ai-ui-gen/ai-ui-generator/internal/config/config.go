@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -19,10 +20,11 @@ type Config struct {
 	Logging       LoggingConfig       `json:"logging"`
 	Observability ObservabilityConfig `json:"observability"`
 	// Service-specific configurations
-	APIGateway  ServiceConfig `json:"api_gateway"`
-	AuthService ServiceConfig `json:"auth_service"`
-	UserService ServiceConfig `json:"user_service"`
-	AIService   ServiceConfig `json:"ai_service"`
+	APIGateway      ServiceConfig `json:"api_gateway"`
+	AuthService     ServiceConfig `json:"auth_service"`
+	UserService     ServiceConfig `json:"user_service"`
+	AIService       ServiceConfig `json:"ai_service"`
+	AIGenService    ServiceConfig `json:"ai_generation_service"`
 	// Shared configurations
 	LogLevel        string `json:"log_level"`
 	TracingEndpoint string `json:"tracing_endpoint"`
@@ -83,10 +85,19 @@ type GoogleOAuthConfig struct {
 
 // AIConfig holds AI service configuration
 type AIConfig struct {
-	LLMEndpoint  string  `json:"llm_endpoint"`
-	ModelName    string  `json:"model_name"`
-	MaxTokens    int     `json:"max_tokens"`
-	Temperature  float64 `json:"temperature"`
+	LLMEndpoint  string      `json:"llm_endpoint"`
+	ModelName    string      `json:"model_name"`
+	MaxTokens    int         `json:"max_tokens"`
+	Temperature  float64     `json:"temperature"`
+	LLM          LLMConfig   `json:"llm"`
+}
+
+// LLMConfig holds LLM provider configuration
+type LLMConfig struct {
+	BaseURL    string        `json:"base_url"`
+	APIKey     string        `json:"api_key"`
+	Timeout    time.Duration `json:"timeout"`
+	MaxRetries int           `json:"max_retries"`
 }
 
 // LoggingConfig holds logging configuration
@@ -149,6 +160,12 @@ func Load() (*Config, error) {
 			ModelName:   getEnv("LLM_MODEL_NAME", "gpt-3.5-turbo"),
 			MaxTokens:   getEnvAsInt("LLM_MAX_TOKENS", 4096),
 			Temperature: getEnvAsFloat("LLM_TEMPERATURE", 0.7),
+			LLM: LLMConfig{
+				BaseURL:    getEnv("VLLM_BASE_URL", "http://localhost:8000"),
+				APIKey:     getEnv("VLLM_API_KEY", ""),
+				Timeout:    time.Duration(getEnvAsInt("VLLM_TIMEOUT_SECONDS", 30)) * time.Second,
+				MaxRetries: getEnvAsInt("VLLM_MAX_RETRIES", 3),
+			},
 		},
 		Logging: LoggingConfig{
 			Level:  getEnv("LOG_LEVEL", "info"),
@@ -175,6 +192,10 @@ func Load() (*Config, error) {
 		AIService: ServiceConfig{
 			Host: getEnv("AI_SERVICE_HOST", "0.0.0.0"),
 			Port: getEnvAsInt("AI_SERVICE_PORT", 8083),
+		},
+		AIGenService: ServiceConfig{
+			Host: getEnv("AI_GEN_SERVICE_HOST", "0.0.0.0"),
+			Port: getEnvAsInt("AI_GEN_SERVICE_PORT", 8084),
 		},
 		// Shared configurations
 		LogLevel:        getEnv("LOG_LEVEL", "info"),
