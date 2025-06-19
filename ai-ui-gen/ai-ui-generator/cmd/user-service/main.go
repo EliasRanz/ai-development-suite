@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/ai-tools/ai-ui-generator/internal/config"
+	"github.com/ai-tools/ai-ui-generator/internal/database"
 	"github.com/ai-tools/ai-ui-generator/internal/service"
 	"github.com/ai-tools/ai-ui-generator/internal/user"
 	pb "github.com/ai-tools/ai-ui-generator/api/proto/user"
@@ -37,9 +38,19 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to initialize service")
 	}
 
-	// Initialize user repository and service
-	repo := user.NewMockRepository() // Using mock for now
-	userService := user.NewService(repo)
+	// Initialize database connection
+	db, err := database.NewConnection(&cfg.Database)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to connect to database")
+	}
+	defer database.Close(db)
+
+	// Initialize repositories
+	userRepo := user.NewPostgresRepository(db)
+	projectRepo := user.NewPostgresProjectRepository(db)
+	
+	// Initialize user service with project repository
+	userService := user.NewServiceWithProjects(userRepo, projectRepo)
 	
 	// Initialize gRPC server
 	userGRPCServer := user.NewGRPCServer(userService)

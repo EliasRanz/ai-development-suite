@@ -7,7 +7,7 @@ set -e
 
 # Database configuration
 DB_HOST=${DB_HOST:-localhost}
-DB_PORT=${DB_PORT:-5432}
+DB_PORT=${DB_PORT:-5433}
 DB_NAME=${DB_NAME:-ai_ui_generator}
 DB_USER=${DB_USER:-postgres}
 DB_PASSWORD=${DB_PASSWORD:-}

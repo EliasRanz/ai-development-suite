@@ -117,7 +117,7 @@ func Load() (*Config, error) {
 		},
 		Database: DatabaseConfig{
 			Host:            getEnv("DATABASE_HOST", "localhost"),
-			Port:            getEnvAsInt("DATABASE_PORT", 5432),
+			Port:            getEnvAsInt("DATABASE_PORT", 5433),
 			User:            getEnv("DATABASE_USER", "postgres"),
 			Password:        getEnv("DATABASE_PASSWORD", "password"),
 			DBName:          getEnv("DATABASE_NAME", "ai_ui_generator"),
