@@ -1,146 +1,74 @@
-# AI Agent Instructions
+# AI Agent Orchestration & Enforcement Instructions
 
-## Core Principles
-1. **Security-first**: Validate all inputs, sanitize data, never commit secrets
-2. **Code quality**: Follow all coding standards (see `coding-standards.md`) for maintainable, testable, and secure code
+All agents must act as orchestrators, enforcing and coordinating all internal standards. Reference and enforce:
+- [coding-standards.md]
+- [version-control.md]
+- [environment-setup.md]
+- [security.md], [security-sensitive-data.md]
+- [script-management.md]
+- [project-management.md]
+- [context.md]
+
+## Core Agentic Principles
+1. **Security-first**: Validate all inputs, sanitize data, never commit secrets (see `security.md`)
+2. **Code quality**: Enforce all coding standards for maintainable, testable, and secure code
 3. **API-first**: Design clear interfaces before implementation
+4. **Automation**: Minimize manual steps; use tools and scripts for all actions
+5. **Context propagation**: Always document and share session context, rationale, and agent-to-agent notes (see `context.md`)
 
-## Required Actions at Session Start
+## Session Orchestration Workflow
+1. **Gather Work Context**: Prompt user for project/task context at session start. Wait for response before proceeding.
+2. **Start Project Management System**: Ensure task tracking is active. Start required services using authoritative commands (`make help`).
+3. **Verify System Readiness**: Use tools to confirm all services are running and accessible before proceeding.
+4. **Environment Setup**: Enforce use of `.env.template` and validate environment configuration (see `environment-setup.md`).
+5. **Script Management**: Prevent script duplication, enforce updates in place, and check for existing functionality (see `script-management.md`).
+6. **Task Workflow**: Use project management tools to check, create, update, and track tasks. Reference `project-management.md` for all commands and status updates.
+7. **Version Control**: Enforce all version control standards, including commit/review workflow, atomic commits, rationale, and context references (see `version-control.md`).
+8. **Command Verification**: Always verify command syntax with `--help` before use. Use only documented options. Never assume flags exist—verify from tool documentation.
+9. **Tool Usage**: Always use tools to run commands and check status. Never ask users to run commands manually.
+10. **Compliance Checks**: Regularly validate compliance with all standards. Use automated scripts and CI/CD checks where possible.
 
-### 1. Ask User About Work Context (FIRST)
-Before starting any development, ALWAYS ask:
-```
-"What will you be working on today? 
-- Project Management tool development (backend/frontend)
-- AI Studio development 
-- Other tools/scripts"
-```
-**STOP. Wait for user response before proceeding.**
+## Error Handling & Escalation
+- Agents must document and escalate blockers, ambiguous requirements, or compliance failures in the session context and notify responsible parties.
+- All unresolved issues should be logged in the project management system for visibility and follow-up.
 
-### 2. Start Project Management System (SECOND)
-**The project management system should always be running for task tracking**
+## Session Logging & Traceability
+- Agents must log key decisions, context changes, and workflow transitions in a session log or project management tool.
+- Ensure all actions are traceable and auditable for future reference.
 
-Based on user's response, set the environment variable and start services:
+## Continuous Improvement Loop
+- Agents must participate in periodic reviews of orchestration processes and propose improvements to standards and workflows.
+- Document all improvement proposals and outcomes in the session context or project management system.
 
-- **For Project Management tool development**: `AI_PM_MODE=dev make ai-pm-start` 
-- **For all other work**: `make ai-pm-start` (uses production mode by default)
+## Onboarding Checklist (for New Agents)
+- Ensure access to all required tools, repositories, and documentation.
+- Review all instruction files and standards.
+- Set up environment and validate configuration using onboarding scripts.
+- Confirm ability to run, validate, and document workflows as described above.
 
-**STOP. Wait for services to start before proceeding.**
+## Glossary
+- **Session Context**: The current state, rationale, and notes relevant to the agent’s work, shared across tasks and agents.
+- **Agent-to-Agent Transfer**: The process of passing context, rationale, or tasks between agents, documented in session context and PRs.
+- **Compliance Check**: Automated or manual validation that all standards and workflows are being followed.
 
-### 3. Verify System Ready (THIRD)
-Use tools to check that services are running and accessible.
+## Agent-to-Agent Collaboration
+- Document all context transfers, rationale, and decisions in session context and PRs.
+- Share relevant notes for downstream agents and future sessions.
+- Reference `context.md` for context sharing protocols.
 
-**STOP. Confirm services are ready before proceeding.**
+## Commit & PR Standards
+- All commits and PRs must reference relevant tasks, session context, and rationale.
+- Follow Conventional Commits and logical grouping (see `version-control.md`).
+- Review, stage, and commit changes as described in the commit & review workflow.
 
-### 4. Script Management (CRITICAL)
-- NEVER create duplicate scripts (no -v2, -enhanced, -new suffixes)
-- UPDATE existing scripts in place
-- CHECK for existing functionality before creating new scripts
-
-### 5. Environment Configuration
-- USE single `.env.template` as authoritative source
-- NEVER create multiple root-level environment templates
-- DOCUMENT all environment variables with clear comments
-
-## Task Workflow (Per Development Task)
-1. **CHECK** current tasks first using tools: `./scripts/project-manager.sh list-tasks`
-2. **VERIFY** command syntax with `--help` before creating/updating tasks
-3. **CREATE/UPDATE** tasks using only documented flags and options
-4. **MOVE** task to appropriate status when starting using tools
-5. **UPDATE** status as work progresses using tools
-6. **COMMIT** with clear messages referencing task numbers
-
-**For detailed CLI commands and examples, see `project-management.md`**
-
-**COMMAND VERIFICATION EXAMPLES:**
-```bash
-# Verify command syntax FIRST
-./scripts/project-manager.sh add-task --help
-./scripts/project-manager.sh update-task --help
-
-# THEN use only documented options
-./scripts/project-manager.sh add-task -p 1 -t "Fix bug" -r high
-./scripts/project-manager.sh update-task -i 42 -s done
-./scripts/project-manager.sh list-tasks -p 1 -s todo
-```
-
-## Version Control Workflow (CRITICAL)
-
-### Before Starting Any Work
-1. **CHECK** git status to see uncommitted changes
-2. **COMMIT** any pending work before starting new tasks
-3. **CREATE** logical, focused commits during development
-
-### During Development
-1. **COMMIT FREQUENTLY** - Make atomic commits for logical changes
-2. **GROUP LOGICALLY** - Related files should be committed together
-3. **WRITE CLEAR MESSAGES** - Follow format: "type(scope): description [task #X]"
-
-### Commit Message Format
-```
-type(scope): brief description [task #X]
-
-Detailed explanation if needed:
-- What was changed
-- Why it was changed
-- Impact of the change
-```
-
-**Types:** feat, fix, docs, refactor, test, chore, style
-**Examples:**
-- `feat(ai-pm): add hot reload development environment [task #26]`
-- `docs(infrastructure): update setup guides after MinIO/Redis removal [task #43]`
-- `refactor(makefile): clean up and organize AI tools targets [task #43]`
-- `chore(docker): remove unused services and simplify compose files [task #43]`
-
-### Logical Commit Grouping
-1. **Infrastructure changes** (Docker, Makefile, scripts)
-2. **Documentation updates** (README, ADRs, guides)
-3. **Configuration changes** (environment, setup files)
-4. **Code changes** (features, fixes, refactoring)
-
-### After Completing Tasks
-1. **REVIEW** all changes with `git status` and `git diff`
-2. **STAGE** files logically with `git add`
-3. **COMMIT** with descriptive messages
-4. **PUSH** to remote repository
-
-**Always ensure version control reflects the logical progression of work!**
-
-## Tool Usage Guidelines
-- **Always use tools** to run commands (`run_in_terminal` tool)
-- **Never ask users** to run commands themselves
-- **Use tools to check status** before assuming services are running
-
-## Command Verification (CRITICAL)
-- **ALWAYS check --help** before using any command with unfamiliar flags
-- **NEVER assume flags exist** based on other tools or general conventions
-- **VERIFY actual syntax** from the tool's own documentation
-- **USE only documented options** - if a flag doesn't appear in --help, it doesn't exist
-- **WHEN IN DOUBT, VERIFY** - always check help documentation rather than guessing
-
-## Command Verification Workflow
-**Before using any CLI command:**
-1. **CHECK help first**: `command --help` or `command help`
-2. **VERIFY flags exist**: Only use flags shown in help output
-3. **TEST syntax**: Try with simple examples if uncertain
-4. **DOCUMENT findings**: Note any differences from expected behavior
-
-**Examples:**
-```bash
-# ALWAYS do this first
-./scripts/project-manager.sh add-task --help
-./scripts/project-manager.sh update-task --help
-./scripts/project-manager.sh list-tasks --help
-```
-
-## Development Environment Setup
-
-**For environment selection rules and detailed service management, see `project-management.md`**
+## Enforcement & Automation
+- Use onboarding and compliance scripts to enforce environment, version control, and security standards.
+- Integrate bots or hooks for context validation, commit message checks, and compliance reporting.
+- Propose improvements to standards as part of regular retrospectives.
 
 ## Related Documentation
-- **Task Management**: `project-management.md` - Detailed CLI commands and service management
-- **Coding Standards**: `coding-standards.md` - Comprehensive code quality, security, and workflow requirements
-- **Development Setup**: `development.md` - Project structure and file organization
-- **Environment Config**: `environment-setup.md` - Environment variable management
-- **Script Management**: `script-management.md` - Script creation and maintenance guidelines
+- All agents must cross-reference and enforce the latest standards in all work.
+- For authoritative commands and workflows, always use `make help` and reference the relevant instruction files.
+
+---
+This file is the single source of truth for orchestrating agentic workflows, enforcing standards, and ensuring reproducibility, security, and compliance across all development activities.
