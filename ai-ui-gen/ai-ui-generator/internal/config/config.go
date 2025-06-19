@@ -42,12 +42,16 @@ type ServiceConfig struct {
 
 // DatabaseConfig holds database configuration
 type DatabaseConfig struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	User     string `json:"user"`
-	Password string `json:"password"`
-	DBName   string `json:"dbname"`
-	SSLMode  string `json:"sslmode"`
+	Host            string `json:"host"`
+	Port            int    `json:"port"`
+	User            string `json:"user"`
+	Password        string `json:"password"`
+	DBName          string `json:"dbname"`
+	SSLMode         string `json:"sslmode"`
+	MaxOpenConns    int    `json:"max_open_conns"`
+	MaxIdleConns    int    `json:"max_idle_conns"`
+	ConnMaxLifetime string `json:"conn_max_lifetime"`
+	ConnMaxIdleTime string `json:"conn_max_idle_time"`
 }
 
 // RedisConfig holds Redis configuration
@@ -112,12 +116,16 @@ func Load() (*Config, error) {
 			Port: getEnvAsInt("SERVER_PORT", 8080),
 		},
 		Database: DatabaseConfig{
-			Host:     getEnv("DATABASE_HOST", "localhost"),
-			Port:     getEnvAsInt("DATABASE_PORT", 5432),
-			User:     getEnv("DATABASE_USER", "postgres"),
-			Password: getEnv("DATABASE_PASSWORD", "password"),
-			DBName:   getEnv("DATABASE_NAME", "ai_ui_generator"),
-			SSLMode:  getEnv("DATABASE_SSL_MODE", "disable"),
+			Host:            getEnv("DATABASE_HOST", "localhost"),
+			Port:            getEnvAsInt("DATABASE_PORT", 5432),
+			User:            getEnv("DATABASE_USER", "postgres"),
+			Password:        getEnv("DATABASE_PASSWORD", "password"),
+			DBName:          getEnv("DATABASE_NAME", "ai_ui_generator"),
+			SSLMode:         getEnv("DATABASE_SSL_MODE", "disable"),
+			MaxOpenConns:    getEnvAsInt("DATABASE_MAX_OPEN_CONNS", 25),
+			MaxIdleConns:    getEnvAsInt("DATABASE_MAX_IDLE_CONNS", 5),
+			ConnMaxLifetime: getEnv("DATABASE_CONN_MAX_LIFETIME", "5m"),
+			ConnMaxIdleTime: getEnv("DATABASE_CONN_MAX_IDLE_TIME", "1m"),
 		},
 		Redis: RedisConfig{
 			Host:     getEnv("REDIS_HOST", "localhost"),
@@ -229,4 +237,12 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// DSN returns the PostgreSQL connection string
+func (dc *DatabaseConfig) DSN() string {
+	return fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		dc.Host, dc.Port, dc.User, dc.Password, dc.DBName, dc.SSLMode,
+	)
 }
