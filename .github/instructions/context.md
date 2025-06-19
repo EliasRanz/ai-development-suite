@@ -124,3 +124,10 @@ Agents should periodically re-read and summarize this file, especially after lon
 
 ## 11. Contact or Escalation
 If context is missing or ambiguous, ask the user for clarification or escalate to a project maintainer.
+
+- For all build, test, and development commands, always reference `make help` for the current, authoritative command set. Do not assume commands from documentation are up to date `make help` is the source of truth.
+
+---
+
+## Agent-to-Agent Context Sharing
+- When handing off, pausing, or completing a task, agents must summarize the current context, key decisions, and next steps by adding a note to the relevant project management task. This ensures smooth agent-to-agent transitions and preserves project knowledge for future contributors.
