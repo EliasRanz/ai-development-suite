@@ -1,84 +1,46 @@
-'use client'
+import { ReactNode } from 'react'
 
-import ChatInterface from '@/components/ChatInterface'
-import PreviewPane from '@/components/PreviewPane'
-import { useState } from 'react'
-import { generateAI, createAIStreamClient } from '@/lib/sse'
+interface DashboardLayoutProps {
+  children: ReactNode
+}
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  const [generatedCode, setGeneratedCode] = useState('')
-  const [isGenerating, setIsGenerating] = useState(false)
-
-  const handlePromptSubmit = async (prompt: string) => {
-    setIsGenerating(true)
-    setGeneratedCode('')
-    
-    try {
-      // Start AI generation
-      const { sessionId } = await generateAI(prompt)
-      
-      // Setup streaming client
-      const streamClient = createAIStreamClient(sessionId, {
-        onMessage: (data) => {
-          setGeneratedCode(prev => prev + data)
-        },
-        onError: (error) => {
-          console.error('Streaming error:', error)
-          setIsGenerating(false)
-        },
-        onClose: () => {
-          setIsGenerating(false)
-        }
-      })
-      
-      streamClient.connect()
-      
-    } catch (error) {
-      console.error('Generation error:', error)
-      setIsGenerating(false)
-    }
-  }
-
+export default function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
-    <div className="h-screen flex flex-col">
-      {/* Header */}
-      <header className="border-b p-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold">AI UI Generator</h1>
-          <div className="flex items-center space-x-4">
-            {/* TODO: Add user menu, settings, etc. */}
-            <button className="px-3 py-1 text-sm border rounded hover:bg-gray-50">
-              Settings
-            </button>
-            <button className="px-3 py-1 text-sm border rounded hover:bg-gray-50">
-              Sign Out
-            </button>
+    <div className="min-h-screen bg-background">
+      {/* Navigation Header */}
+      <header className="border-b bg-white">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex h-16 items-center justify-between">
+            <div className="flex items-center">
+              <h1 className="text-xl font-semibold text-gray-900">AI UI Generator</h1>
+            </div>
+            
+            <nav className="hidden md:flex space-x-8">
+              <a href="/dashboard/home" className="text-gray-600 hover:text-gray-900">
+                Dashboard
+              </a>
+              <a href="/dashboard/projects" className="text-gray-600 hover:text-gray-900">
+                Projects
+              </a>
+              <a href="/dashboard/settings" className="text-gray-600 hover:text-gray-900">
+                Settings
+              </a>
+            </nav>
+
+            <div className="flex items-center space-x-4">
+              {/* TODO: Add user menu */}
+              <button className="bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90">
+                Sign Out
+              </button>
+            </div>
           </div>
         </div>
       </header>
-      
+
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Chat Interface */}
-        <div className="w-1/2 border-r">
-          <ChatInterface 
-            onPromptSubmit={handlePromptSubmit}
-            isGenerating={isGenerating}
-          />
-        </div>
-        
-        {/* Preview Pane */}
-        <div className="w-1/2">
-          <PreviewPane 
-            generatedCode={generatedCode}
-            isLoading={isGenerating}
-          />
-        </div>
-      </div>
+      <main className="flex-1">
+        {children}
+      </main>
     </div>
   )
 }
