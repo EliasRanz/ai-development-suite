@@ -99,12 +99,24 @@ cd ai-pm
 ## 📁 Repository Structure
 
 This is organized as a monorepo for easier development:
-- `ai-studio/` - Universal AI tools desktop application
-- `ai-pm/` - Web-based project management system 
-- `comfy-ui/` - Legacy ComfyUI components (deprecated)
-- `shared/` - Common utilities and documentation
+```
+ai-tools/                    # Root monorepo
+├── ai-studio/              # Desktop application (Wails + React)
+│   ├── backend/           # Go backend with Clean Architecture
+│   ├── frontend/          # React TypeScript UI
+│   └── main.go           # Wails entry point
+├── ai-pm/                 # Project management system
+│   ├── backend/          # Go backend with PostgreSQL
+│   ├── frontend/         # React TypeScript UI
+│   └── scripts/          # Setup and management scripts
+├── scripts/              # Global utility scripts
+├── .github/instructions/ # AI agent instructions
+├── ADRs/                # Architecture Decision Records
+├── shared/              # Common utilities and docs
+└── tests/               # Global test suites
+```
 
-Each tool can be used independently and has its own documentation.
+Each tool can be used independently and has its own documentation (see each tool's README for details).
 
 ## 🤖 AI-Assisted Development Methodology
 
@@ -137,6 +149,23 @@ This serves as a real-world example of how AI can accelerate development while m
 See individual tool READMEs for specific setup instructions.
 
 For general development utilities, see [`shared/`](shared/) directory.
+
+## Example: Starting an Agent Session with Context
+
+At the start of your session, prompt Copilot or your agent with:
+
+```
+Please load and use the information in .github/instructions/context.md as the primary context for this session.
+```
+
+This ensures the agent has the correct project mission, requirements, and workflow for productive, context-aware development.
+
+## Internal & Agentic Development Standards
+
+> **For AI agents, Copilot, and internal contributors:**  
+> All coding standards, security policies, and agent workflow instructions are maintained in [.github/instructions/](.github/instructions/).  
+>  
+> Please reference these files for up-to-date internal development practices, agentic coding guidelines, and Copilot usage instructions.
 
 ## Contributing
 
