@@ -46,6 +46,30 @@ All agents must follow these standards to ensure a clean, auditable, and collabo
 - Regularly review commit history and PRs for compliance and opportunities to improve agent workflows.
 - For authoritative development commands, always use `make help` (see [context.md]).
 
+## Commit & Review Workflow (for Agents)
+
+Agents must follow this workflow for all changes to ensure traceability, reproducibility, and compliance:
+
+1. **Review Changes**
+   - Use `git status` to see modified, staged, and untracked files.
+   - Use `git diff <file>` to review changes before staging.
+2. **Stage Changes**
+   - Use `git add <file>` to stage specific files for commit.
+   - Stage only files relevant to the current logical change.
+3. **Commit with Rationale**
+   - Use `git commit -m "type(scope): summary\n\nDetailed rationale, context, and references to session/task as needed."`
+   - Ensure every commit message follows the Conventional Commits standard and includes rationale/context.
+4. **Review Before Pushing**
+   - Use `git diff --cached` to review staged changes before committing.
+   - Amend or split commits if necessary for clarity and atomicity.
+5. **Push and PR**
+   - Use `git push` to update the remote branch.
+   - Open a Pull Request (PR) and follow the PR workflow above.
+6. **Reference `make help`**
+   - For any custom or project-specific workflows, always check `make help` for authoritative commands.
+
+This workflow ensures all agent actions are auditable, reproducible, and compliant with project standards.
+
 ## Advanced Agentic Automation & Compliance
 
 - **Automated Context Propagation:**
