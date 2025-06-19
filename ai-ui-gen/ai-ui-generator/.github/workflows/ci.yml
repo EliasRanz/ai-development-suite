@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v4
+      with:
+        go-version: '1.22'
+    
+    - name: Run tests
+      run: go test ./...
+    
+    - name: Build services
+      run: |
+        go build ./cmd/api-gateway
+        go build ./cmd/auth-service
+        go build ./cmd/user-service
+        go build ./cmd/ai-service
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+    
+    - name: Install dependencies
+      run: cd web && npm ci
+    
+    - name: Build frontend
+      run: cd web && npm run build
