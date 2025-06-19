@@ -1,154 +1,46 @@
-# Environment Configuration Guidelines
+# Environment Setup Standards for Agentic Workflows
 
-This document outlines the standardized approach to environment configuration across the AI tools suite.
+All agents must follow these standards to ensure reproducible, secure, and maintainable environments. Reference: [security.md], [script-management.md], [context.md].
 
-## File Structure
+## Authoritative Templates
+- Use `.env.template` as the single source of truth for all environment variables.
+- Service-specific `.env.example` files are allowed only within their respective directories and must be documented.
+- Never create multiple root-level templates.
 
-### Primary Template
-- **`.env.template`** - The single source of truth for environment configuration
-  - Contains comprehensive settings for all tools
-  - Includes detailed documentation and security notes
-  - Should be the only root-level environment template
+## Agentic Setup Process
+1. **Automated Initialization**
+   - Use onboarding scripts to copy `.env.template` to `.env` and service-specific examples as needed.
+   - Agents must not manually edit or create environment files unless automation is unavailable.
+2. **Customization**
+   - Agents must update all required secrets, passwords, and tokens with secure, unique values.
+   - Use `openssl rand -base64 32` or equivalent for secret generation.
+   - All changes must be documented in the agent session context and, if relevant, in PRs.
+3. **Validation**
+   - Use scripts to validate that `.env` files are ignored by git and contain no sensitive defaults.
+   - Run `git status` and `git check-ignore .env` as part of automated checks.
+   - Agents are responsible for ensuring no sensitive data is committed.
 
-### Service-Specific Templates
-- **`comfy-ui/launcher/.env.example`** - ComfyUI-specific settings
-- Service directories may have their own `.env.example` files for tool-specific settings
+## Best Practices for Agents
+- Document all environment variables with clear comments and logical grouping.
+- Use descriptive, consistent variable names and secure placeholder values.
+- Validate environment setup before running any scripts or services.
+- Reference `make help` for authoritative setup and validation commands.
 
-### Ignored Files
-The following environment files are automatically ignored by git:
-- `.env`
-- `.env.local`
-- `.env.production`
-- `.env.development`
-- `.env.staging`
-- `*.env`
+## Anti-Patterns & Enforcement
+- Never commit actual `.env` files or sensitive data.
+- Never use weak or default passwords in production.
+- Never create redundant or undocumented templates.
+- Automated compliance scripts should audit for these anti-patterns regularly.
 
-## Setup Process
+## Maintenance & Auditing
+- Add or remove variables only through `.env.template` and update documentation.
+- Agents must review environment templates quarterly for security and relevance.
+- Use automated tools to check for unused or obsolete variables.
 
-### 1. Initial Configuration
-```bash
-# Copy the primary template
-cp .env.template .env
-
-# For service-specific tools (e.g., ComfyUI)
-cp comfy-ui/launcher/.env.example comfy-ui/launcher/.env
-```
-
-### 2. Customize Settings
-
-#### Required Changes
-- **Database passwords**: Update all `AI_PM_DB_PASSWORD` and storage passwords
-- **Secret keys**: Generate secure keys using `openssl rand -base64 32`
-- **Paths**: Update `PROJECT_ROOT` and related paths for your system
-- **API tokens**: Set actual API tokens for services you use
-
-#### Security Requirements
-- Use strong, unique passwords (minimum 16 characters)
-- Generate cryptographically secure secret keys
-- Never use default passwords in production
-- Regularly rotate credentials
-
-### 3. Validation
-```bash
-# Check that .env is properly ignored
-git status
-
-# Verify no sensitive data is tracked
-git check-ignore .env
-```
-
-## Configuration Sections
-
-### AI Project Manager
-Core project management system configuration:
-- Database connection settings
-- API endpoints and authentication
-- Storage and backup settings
-
-### AI Studio
-Desktop application configuration:
-- Data and configuration directories
-- Logging levels and debug settings
-- API endpoints for integrations
-
-### Development
-Development-specific settings:
-- Environment modes (development/production)
-- Debug flags and logging
-- Local path overrides
-
-## Best Practices
-
-### ✅ Do
-- Use the primary `.env.template` as the authoritative source
-- Document environment variables with clear comments
-- Group related variables into logical sections
-- Include setup instructions and security notes
-- Use descriptive variable names with consistent prefixes
-- Validate that `.env` files are properly ignored by git
-
-### ❌ Don't
-- Create multiple root-level environment templates
-- Commit actual `.env` files to version control
-- Use default passwords in production
-- Store sensitive data in template files
-- Create redundant or overlapping templates
-
-## Anti-Patterns
-
-### Multiple Templates
-**Problem**: Having multiple root-level templates (`.env.example`, `.env.template`, `.env.local.template`)
-**Solution**: Use a single comprehensive `.env.template` file
-
-### Scattered Configuration
-**Problem**: Environment variables spread across multiple undocumented files
-**Solution**: Centralize common settings in the main template, use service-specific files only when necessary
-
-### Weak Security Defaults
-**Problem**: Using weak default passwords or secrets in templates
-**Solution**: Use placeholder values that clearly indicate they must be changed
-
-## Maintenance
-
-### Adding New Variables
-1. Add to the appropriate section in `.env.template`
-2. Include descriptive comments
-3. Use secure placeholder values
-4. Update this documentation if needed
-
-### Removing Variables
-1. Remove from `.env.template`
-2. Check for usage across all tools
-3. Update documentation
-4. Consider backward compatibility
-
-### Regular Audits
-- Review environment templates quarterly
-- Ensure all sensitive defaults are placeholders
-- Verify documentation is current
-- Check for unused or obsolete variables
-
-## Integration with Tools
-
-### Project Management System
-- See `project-management.md` for service startup and management commands
-- Environment variables configure database connections and API endpoints
-
-### Scripts
-- Main CLI script: `scripts/project-manager.sh`
-- Sources environment variables automatically
-- Validates required settings before execution
-
-### Docker Compose
-- Services use environment variables from `.env`
-- Override files can provide service-specific defaults
-- Production configurations should use separate mechanisms
-
-### Development Tools
-- VS Code tasks can reference environment variables
-- Build scripts should validate environment setup
-- Testing should use isolated environment configuration
+## Integration & Automation
+- All scripts (see `script-management.md`) must source environment variables and validate required settings before execution.
+- Docker Compose and other tools must use `.env` and support overrides for service-specific needs.
+- CI/CD pipelines should validate environment configuration and block non-compliant changes.
 
 ---
-
-This standardized approach ensures consistent, secure, and maintainable environment configuration across the entire AI tools suite.
+This standard ensures all agents can reliably set up, validate, and maintain secure environments with minimal manual intervention, supporting automation, reproducibility, and compliance across the AI tools suite.
