@@ -16,13 +16,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </div>
             
             <nav className="hidden md:flex space-x-8">
-              <a href="/dashboard/home" className="text-gray-600 hover:text-gray-900">
+              <a href="/home" className="text-gray-600 hover:text-gray-900">
                 Dashboard
               </a>
-              <a href="/dashboard/projects" className="text-gray-600 hover:text-gray-900">
+              <a href="/projects" className="text-gray-600 hover:text-gray-900">
                 Projects
               </a>
-              <a href="/dashboard/settings" className="text-gray-600 hover:text-gray-900">
+              <a href="/generate" className="text-gray-600 hover:text-gray-900">
+                Generate
+              </a>
+              <a href="/settings" className="text-gray-600 hover:text-gray-900">
                 Settings
               </a>
             </nav>

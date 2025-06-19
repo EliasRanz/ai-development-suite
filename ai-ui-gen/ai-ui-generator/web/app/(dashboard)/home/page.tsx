@@ -29,13 +29,13 @@ export default function DashboardPage() {
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
         <div className="space-y-4">
           <a
-            href="/dashboard/generate"
+            href="/generate"
             className="block w-full bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 text-center font-medium"
           >
             Start Generating Components
           </a>
           <a
-            href="/dashboard/projects"
+            href="/projects"
             className="block w-full bg-gray-100 text-gray-700 px-6 py-3 rounded-md hover:bg-gray-200 text-center font-medium"
           >
             View All Projects
