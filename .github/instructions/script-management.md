@@ -1,5 +1,7 @@
 # Script Management Guidelines
 
+All agents must follow these guidelines to prevent bloat, maintain clean tooling, and ensure traceability. Reference: [coding-standards.md], [testing.md], [project-management.md], [environment-setup.md], [security.md], [copilot-instructions.md].
+
 ## Overview
 This document establishes guidelines for managing scripts in the AI Development Suite to prevent bloat and maintain clean, organized tooling.
 
@@ -65,6 +67,29 @@ When cleaning up script bloat:
 4. **Remove duplicates** and commit with clear message
 5. **Update documentation** to reflect changes
 
+## Additional Best Practices
+
+- **Shebang and Executable Permissions:**
+  - All scripts must start with the appropriate shebang (e.g., `#!/bin/bash`).
+  - Set executable permissions (`chmod +x script.sh`) for all scripts.
+- **Shellcheck and Linting:**
+  - Run `shellcheck` or equivalent linters on all shell scripts to catch errors and enforce style.
+- **Error Handling and Exit Codes:**
+  - Use robust error handling (e.g., `set -euo pipefail` for bash).
+  - Scripts must return meaningful exit codes.
+- **Logging and Output:**
+  - Standardize logging/output format, including timestamps and log levels if appropriate.
+- **Parameter Validation:**
+  - Validate all input parameters and provide clear usage/help messages.
+- **Input Handling:**
+  - Scripts must support multi-line strings, special characters, and whitespace in input parameters where applicable.
+  - Validate and properly escape or quote all user input to prevent errors and security issues.
+- **Script Versioning (in comments):**
+  - Track major changes in header comments, not filenames.
+- **Script Dependency Management:**
+  - Document and check for required dependencies at the start of each script.
+  - When adding a new dependency, update the relevant setup script to validate its installation or install it automatically.
+
 ## Anti-Patterns to Avoid
 - ❌ Creating `-v2` or `-new` versions instead of updating original
 - ❌ Keeping "backup" versions of scripts in the repo
@@ -115,24 +140,27 @@ scripts/project-manager-simple.sh
 ## Integration with Development Workflow
 
 ### Task Tracking for Script Changes
-When modifying or creating scripts, create a task in the project management system:
-
-**For task creation commands, see `project-management.md`**
+When modifying or creating scripts, create a task in the project management system. See [project-management.md] for task creation and tracking commands.
 
 ### Security Considerations
-Scripts often handle sensitive data and system operations.
-
-**For security and quality requirements, see `coding-standards.md`.**
+Scripts often handle sensitive data and system operations. See [coding-standards.md] and [security.md] for security and quality requirements.
 
 ### Testing Script Changes
-All scripts should be tested before deployment.
+All scripts should be tested before deployment. See [testing.md] for script testing requirements.
 
-**For testing requirements, see `testing.md`**
+### Environment Setup
+Scripts may depend on environment configuration. See [environment-setup.md] for standardized environment setup.
+
+### Orchestration & Enforcement
+Agents must enforce these script management standards as part of the overall workflow. See [copilot-instructions.md] for orchestration and enforcement requirements.
 
 ## Related Documentation
-- **Project Management**: See `project-management.md` for task creation and tracking commands
-- **Coding Standards**: See `coding-standards.md` for comprehensive code quality, security, and workflow requirements
-- **Testing**: See `testing.md` for script testing requirements
-- **Environment Setup**: See `environment-setup.md` for standardized environment configuration
-- **Repository Structure**: See `../../REPOSITORY_STRUCTURE.md` for overall organization
-- **Contributing Guidelines**: See `../../CONTRIBUTING.md` for development practices
+- **Project Management**: [project-management.md]
+- **Coding Standards**: [coding-standards.md]
+- **Testing**: [testing.md]
+- **Environment Setup**: [environment-setup.md]
+- **Repository Structure**: [../../REPOSITORY_STRUCTURE.md]
+- **Contributing Guidelines**: [../../CONTRIBUTING.md]
+
+---
+All script changes must be reviewed, tested, and documented according to these standards and cross-referenced with the latest project requirements.
