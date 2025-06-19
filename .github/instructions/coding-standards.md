@@ -1,266 +1,102 @@
-# Coding Standards for AI Agents
+# Coding Standards for Agentic Development
 
-## SOLID Principles (MANDATORY)
-```go
-// Single Responsibility - One reason to change
-type UserService struct{}
-func (s *UserService) CreateUser(user User) error
+## 1. Core Coding Standards (Language-Agnostic)
+- Apply SOLID, DRY, and KISS principles in all code, regardless of language.
+- Design APIs and interfaces before implementation (API-first).
+- Keep files small and modular: refactor at 300+ lines and never exceed 500 lines per file (except for generated code—files created automatically by tools, such as API stubs, ORM models, or build outputs, which are exempt from these limits).
+- Use descriptive, consistent naming for variables, functions, and files.
+- Handle errors explicitly and fail fast; never ignore errors.
+- Validate all inputs and never hardcode secrets or credentials.
+- Write clear, minimal comments; prefer self-documenting code.
+- Ensure all code is covered by automated tests; aim for high coverage.
+- All changes must be reviewed before merging.
+- Refactor functions/methods at 40+ lines; never exceed 50 lines. Each function should have a single responsibility.
+- Code reviews must reject changes that violate these limits.
 
-// Open/Closed - Open for extension, closed for modification  
-type Handler interface {
-    Handle(request Request) Response
-}
+## 2. Security & Privacy
+- Follow least privilege and secure-by-default principles.
+- Never commit secrets, credentials, or sensitive data.
+- Sanitize and validate all external input.
+- Review for security issues before committing or merging.
 
-// Liskov Substitution - Subtypes must be substitutable
-type Database interface {
-    Save(entity interface{}) error
-}
+## 3. Documentation & Readability
+- Keep documentation concise and relevant.
+- Update documentation if code changes affect usage, architecture, or workflows.
+- Prefer clarity and maintainability over cleverness.
 
-// Interface Segregation - Small, focused interfaces
-type Reader interface { Read([]byte) (int, error) }
-type Writer interface { Write([]byte) (int, error) }
+## 4. Agentic Coding Best Practices
+- Propose a plan and wait for user confirmation before implementation.
+- Keep changes small, incremental, and reviewable.
+- Ask clarifying questions if requirements are ambiguous.
+- Reference the “Quality & Review Checklist” in `context.md` for every task.
 
-// Dependency Inversion - Depend on abstractions
-type Service struct {
-    repo Repository // interface, not concrete type
-}
-```
+## 5. Language-Specific Guidance
+- Reference official style guides and use linters/formatters for each language:
+  - Go: [Effective Go](https://go.dev/doc/effective_go.html)
+  - Python: [PEP 8](https://peps.python.org/pep-0008/)
+  - TypeScript/JavaScript: [Airbnb Style Guide](https://github.com/airbnb/javascript)
+  - Shell: [Google Shell Style Guide](https://google.github.io/styleguide/shellguide.html)
+- Add language-specific notes in project or module READMEs as needed.
 
-## DRY Principle
-- EXTRACT common functionality into shared functions
-- USE composition over inheritance
-- CREATE shared interfaces for similar operations
+## 6. Linting & Formatting
+- All code must pass automated linting and be auto-formatted before review. Use project-standard tools for each language.
 
-## KISS Principle  
-- CHOOSE simplest solution that works
-- AVOID over-engineering
-- WRITE code readable by any skill level
+## 7. Dependency Management
+- Use the latest stable versions of dependencies unless there is a documented reason to pin to an older version.
+- Regularly review and update dependencies to ensure security and compatibility.
+- Document and justify any new third-party dependency or version pinning in the PR or commit message. Avoid unnecessary dependencies.
 
-## API-First Design
-```go
-// Define interfaces before implementation
-type TaskService interface {
-    CreateTask(task Task) error
-    GetTask(id string) (Task, error)
-    UpdateTask(id string, updates TaskUpdate) error
-    DeleteTask(id string) error
-}
-```
+## 8. Comments & Public APIs
+- All public functions, classes, and exported APIs must have clear docstrings or comments describing their purpose and usage.
 
-## File Size Limits (ENFORCED)
-- **Maximum 500 lines per file**
-- **Refactor at 300+ lines**
-- **Break monolithic files into modules**
+## 9. Refactoring & Technical Debt
+- Flag and, when possible, address technical debt or code smells as part of your workflow. Leave TODOs with context if immediate refactor is not possible.
 
-## Error Handling Pattern
-```go
-func doSomething() error {
-    if err := validate(); err != nil {
-        return fmt.Errorf("validation failed: %w", err)
-    }
-    return nil
-}
-```
+## 10. Accessibility & Internationalization (if relevant)
+- For UI code, follow accessibility (WCAG) and i18n/l10n best practices where applicable.
 
-## Security Standards (MANDATORY)
+## 11. Performance
+- Consider performance and resource usage, especially for critical paths. Optimize only when necessary and justified.
 
-### Input Validation (ALWAYS REQUIRED)
-```go
-// Create centralized validation utilities
-package validation
+## 12. Commit Messages
+- Use clear, conventional commit messages. Example:
+  - `feat(api): add user authentication endpoint`
+  - `fix(ui): correct button alignment on mobile`
+  - `refactor(core): split monolithic file into modules`
 
-import (
-    "errors"
-    "strings"
-    "unicode/utf8"
-)
+## 13. Branching & Feature Flags
+- Use feature branches for all new work. Never commit directly to the main branch.
+- All work-in-progress or experimental features must be protected by feature flags to prevent unfinished code from affecting production.
+- For full details on branching strategy, commit workflow, and feature flagging, see `version-control.md`.
 
-// ValidateText validates text input with security checks
-func ValidateText(input string, minLen, maxLen int, fieldName string) error {
-    // Length validation
-    if len(input) < minLen || len(input) > maxLen {
-        return fmt.Errorf("%s length must be between %d and %d characters", fieldName, minLen, maxLen)
-    }
-    
-    // UTF-8 validation
-    if !utf8.ValidString(input) {
-        return errors.New("invalid UTF-8 encoding")
-    }
-    
-    // XSS prevention
-    dangerous := []string{"<script>", "</script>", "javascript:", "onclick=", "onerror="}
-    for _, pattern := range dangerous {
-        if strings.Contains(strings.ToLower(input), pattern) {
-            return errors.New("potentially malicious content detected")
-        }
-    }
-    
-    // Path traversal prevention
-    if strings.Contains(input, "..") || strings.Contains(input, "/etc/") {
-        return errors.New("path traversal attempt detected")
-    }
-    
-    return nil
-}
+## 14. Automated Enforcement & Tooling
+- Use pre-commit hooks (lint, test, format) to catch issues before code review.
+- Integrate CI/CD pipelines to enforce standards and run automated checks on every PR.
+- Reference or provide editorconfig, linter, and formatter configs in the repo for consistency.
 
-// ValidateID validates identifier strings
-func ValidateID(id string) error {
-    if len(id) == 0 || len(id) > 50 {
-        return errors.New("invalid ID length")
-    }
-    
-    // Only allow alphanumeric and hyphens
-    for _, char := range id {
-        if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || 
-             (char >= '0' && char <= '9') || char == '-') {
-            return errors.New("ID contains invalid characters")
-        }
-    }
-    
-    return nil
-}
+## 15. Backward Compatibility
+- Consider and document backward compatibility for all public APIs and data models. Avoid breaking changes unless necessary and well-communicated.
 
-// Usage in application code - ALWAYS use validation utilities
-func CreateTask(title, description string) error {
-    // Validate all inputs using centralized functions
-    if err := validation.ValidateText(title, 1, 255, "title"); err != nil {
-        return fmt.Errorf("invalid title: %w", err)
-    }
-    
-    if err := validation.ValidateText(description, 0, 2000, "description"); err != nil {
-        return fmt.Errorf("invalid description: %w", err)
-    }
-    
-    // Proceed with business logic
-    return saveTask(title, description)
-}
+## 16. Legacy Code
+- When working in legacy code, leave it better than you found it. Refactor or add tests incrementally where possible.
 
-func GetTaskByID(taskID string) (Task, error) {
-    // Validate ID format
-    if err := validation.ValidateID(taskID); err != nil {
-        return Task{}, fmt.Errorf("invalid task ID: %w", err)
-    }
-    
-    // Proceed with database query
-    return fetchTask(taskID)
-}
-```
+## 17. Code Ownership & Review Rotation
+- Encourage shared code ownership and rotate code review responsibilities to spread knowledge and avoid silos.
 
-### SQL Injection Prevention (MANDATORY)
-```go
-// ALWAYS use parameterized queries
-func GetUserByID(db *sql.DB, userID string) (User, error) {
-    // ✅ CORRECT - Parameterized query
-    query := "SELECT name, email FROM users WHERE id = ?"
-    row := db.QueryRow(query, userID)
-    
-    // ❌ NEVER DO THIS - String concatenation
-    // query := "SELECT * FROM users WHERE id = '" + userID + "'"
-    
-    var user User
-    err := row.Scan(&user.Name, &user.Email)
-    return user, err
-}
-```
+## 18. Security Reviews
+- For sensitive or critical code, require a dedicated security review or checklist in addition to standard review.
 
-### Authentication & Authorization
-```go
-// ALWAYS verify permissions before operations
-func DeleteTask(userID, taskID string) error {
-    // Verify user owns the task
-    task, err := GetTask(taskID)
-    if err != nil {
-        return err
-    }
-    
-    if task.OwnerID != userID {
-        return errors.New("unauthorized: user does not own this task")
-    }
-    
-    return performDelete(taskID)
-}
-```
+## 19. Open Source Readiness (if applicable)
+- Ensure all code, dependencies, and documentation are ready for public release. Follow licensing and third-party code requirements.
 
-### File Path Security
-```go
-// ALWAYS sanitize file paths
-func SaveFile(filename string, content []byte) error {
-    // Clean and validate path
-    cleanPath := filepath.Clean(filename)
-    
-    // Prevent directory traversal
-    if strings.Contains(cleanPath, "..") {
-        return errors.New("invalid file path")
-    }
-    
-    // Restrict to allowed directory
-    allowedDir := "/app/uploads"
-    fullPath := filepath.Join(allowedDir, cleanPath)
-    
-    if !strings.HasPrefix(fullPath, allowedDir) {
-        return errors.New("path outside allowed directory")
-    }
-    
-    return os.WriteFile(fullPath, content, 0644)
-}
-```
+## 20. Continuous Improvement
+- Contributors and agents are encouraged to propose improvements to these coding standards as the project evolves.
 
-### Environment Variable Security
-```go
-// NEVER hardcode secrets in code
-func GetDatabaseURL() string {
-    // ✅ CORRECT - Read from environment
-    dbURL := os.Getenv("DATABASE_URL")
-    if dbURL == "" {
-        log.Fatal("DATABASE_URL environment variable required")
-    }
-    return dbURL
-    
-    // ❌ NEVER DO THIS - Hardcoded secrets
-    // return "postgres://user:password123@localhost/db"
-}
-```
+---
 
-### HTTP Security Headers
-```go
-// ALWAYS set security headers
-func SetSecurityHeaders(w http.ResponseWriter) {
-    w.Header().Set("X-Content-Type-Options", "nosniff")
-    w.Header().Set("X-Frame-Options", "DENY")
-    w.Header().Set("X-XSS-Protection", "1; mode=block")
-    w.Header().Set("Content-Security-Policy", "default-src 'self'")
-}
-```
-
-### Error Handling Security
-```go
-// NEVER expose internal details in errors
-func LoginUser(email, password string) error {
-    user, err := getUserByEmail(email)
-    if err != nil {
-        // ✅ CORRECT - Generic error message
-        return errors.New("invalid credentials")
-        
-        // ❌ NEVER DO THIS - Exposes system details
-        // return fmt.Errorf("user not found in database: %v", err)
-    }
-    
-    if !validatePassword(password, user.HashedPassword) {
-        // ✅ CORRECT - Same generic message
-        return errors.New("invalid credentials")
-    }
-    
-    return nil
-}
-```
-
-## Security Checklist (ENFORCE BEFORE COMMIT)
-- [ ] All user inputs validated and sanitized
-- [ ] No SQL injection vulnerabilities (parameterized queries only)
-- [ ] No path traversal vulnerabilities  
-- [ ] No hardcoded secrets or credentials
-- [ ] Proper error handling (no information leakage)
-- [ ] Authentication/authorization checks in place
-- [ ] Security headers set for HTTP responses
-- [ ] Input length limits enforced
-- [ ] File upload restrictions implemented
+For more details, see:
+- `context.md` — Workflow and review checklist
+- `security.md` — Security policies
+- `testing.md` — Testing requirements
+- `architecture.md` — Architecture and design
+- `version-control.md` — Commit and branching standards

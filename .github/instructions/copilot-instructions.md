@@ -2,7 +2,7 @@
 
 ## Core Principles
 1. **Security-first**: Validate all inputs, sanitize data, never commit secrets
-2. **Code quality**: SOLID, DRY, KISS principles - write maintainable, testable code
+2. **Code quality**: Follow all coding standards (see `coding-standards.md`) for maintainable, testable, and secure code
 3. **API-first**: Design clear interfaces before implementation
 
 ## Required Actions at Session Start
@@ -140,7 +140,7 @@ Detailed explanation if needed:
 
 ## Related Documentation
 - **Task Management**: `project-management.md` - Detailed CLI commands and service management
-- **Code Standards**: `coding-standards.md` - SOLID principles and security requirements  
+- **Coding Standards**: `coding-standards.md` - Comprehensive code quality, security, and workflow requirements
 - **Development Setup**: `development.md` - Project structure and file organization
 - **Environment Config**: `environment-setup.md` - Environment variable management
 - **Script Management**: `script-management.md` - Script creation and maintenance guidelines

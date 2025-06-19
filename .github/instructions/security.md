@@ -3,7 +3,7 @@
 ## Security-First Development Policy
 
 ### Primary Rule
-**ALL code MUST follow security standards defined in `coding-standards.md`**
+**ALL code MUST follow the comprehensive coding standards defined in `coding-standards.md` (including security, quality, and workflow requirements).**
 
 ### Critical Security Requirements
 1. **Input Validation**: Use centralized validation utilities (see coding-standards.md)
@@ -29,4 +29,4 @@ npm audit
 - [ ] Error messages don't leak sensitive data
 - [ ] Security headers implemented for HTTP responses
 
-**For detailed implementation examples, see `coding-standards.md` Security Standards section.**
+**For detailed implementation examples and requirements, see `coding-standards.md`.**

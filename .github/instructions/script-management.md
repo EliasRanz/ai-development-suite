@@ -34,7 +34,7 @@ This document establishes guidelines for managing scripts in the AI Development 
 1. **Check existing scripts** - Does this functionality already exist?
 2. **Review current inventory** - See the Active Scripts list above
 3. **Consider enhancement** - Can we improve an existing script instead?
-4. **Follow coding standards** - See `coding-standards.md` for quality requirements
+4. **Follow coding standards** - See `coding-standards.md` for comprehensive code quality, security, and workflow requirements
 5. **Document purpose** - Add clear comments explaining what the script does
 6. **Single responsibility** - Each script should have one clear purpose
 
@@ -122,7 +122,7 @@ When modifying or creating scripts, create a task in the project management syst
 ### Security Considerations
 Scripts often handle sensitive data and system operations.
 
-**For security requirements, see `coding-standards.md` Security Standards section**
+**For security and quality requirements, see `coding-standards.md`.**
 
 ### Testing Script Changes
 All scripts should be tested before deployment.
@@ -131,7 +131,7 @@ All scripts should be tested before deployment.
 
 ## Related Documentation
 - **Project Management**: See `project-management.md` for task creation and tracking commands
-- **Code Standards**: See `coding-standards.md` for security requirements and quality standards
+- **Coding Standards**: See `coding-standards.md` for comprehensive code quality, security, and workflow requirements
 - **Testing**: See `testing.md` for script testing requirements
 - **Environment Setup**: See `environment-setup.md` for standardized environment configuration
 - **Repository Structure**: See `../../REPOSITORY_STRUCTURE.md` for overall organization
