@@ -9,6 +9,7 @@
 - Validate all inputs and never hardcode secrets or credentials.
 - Write clear, minimal comments; prefer self-documenting code.
 - Ensure all code is covered by automated tests; aim for high coverage.
+- Tests should be properly packaged and organized, with clear names indicating their purpose.
 - All changes must be reviewed before merging.
 - Refactor functions/methods at 40+ lines; never exceed 50 lines. Each function should have a single responsibility.
 - Code reviews must reject changes that violate these limits.
