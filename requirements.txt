@@ -8,11 +8,13 @@ annotated-types==0.7.0
     # via pydantic
 bottle==0.13.3
     # via pywebview
+exceptiongroup==1.3.0
+    # via pytest
 iniconfig==2.1.0
     # via pytest
 packaging==25.0
     # via pytest
-pillow==11.2.1
+pillow==11.3.0
     # via pystray
 pluggy==1.6.0
     # via pytest
@@ -40,8 +42,11 @@ six==1.17.0
     # via
     #   pystray
     #   python-xlib
+tomli==2.2.1
+    # via pytest
 typing-extensions==4.13.2
     # via
+    #   exceptiongroup
     #   pydantic
     #   pydantic-core
     #   pywebview
