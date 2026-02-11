@@ -12,7 +12,7 @@ iniconfig==2.1.0
     # via pytest
 packaging==25.0
     # via pytest
-pillow==11.2.1
+pillow==12.1.1
     # via pystray
 pluggy==1.6.0
     # via pytest
